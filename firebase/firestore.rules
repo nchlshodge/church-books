@@ -1,0 +1,72 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ===== BEGIN CHURCH BOOKS =====
+    // Church Books (Accounting/). Every church's records live under orgs/{org}; nothing is readable outside
+    // your own church. The ledger (entries, sources, audit, snapshots, ledger state, setup) is written only by
+    // the books* Cloud Functions. Helpers are named books… and live inside this block, so it can be pasted
+    // into another app's rules (the RCC Hub's) without clashing. Source: Accounting/firebase/firestore.rules.
+    match /bookUsers/{uid} { allow read: if request.auth != null && request.auth.uid == uid; allow write: if false; }
+    match /bookInvites/{email} { allow read, write: if false; }
+
+    match /orgs/{org} {
+      function booksMemberDoc() { return /databases/$(database)/documents/orgs/$(org)/members/$(request.auth.uid); }
+      // A member whose access hasn't ended (untilMs: the last moment of access, for e.g. an auditor)
+      function booksMember() { return request.auth != null && exists(booksMemberDoc()) && request.time.toMillis() < get(booksMemberDoc()).data.get('untilMs', 9999999999999); }
+      function booksRole() { return get(booksMemberDoc()).data.role; }
+      function booksCanRead() { return booksMember() && booksRole() in ['owner', 'admin', 'bookkeeper', 'reviewer', 'viewer']; }
+      function booksCanWork() { return booksMember() && booksRole() in ['owner', 'admin', 'bookkeeper', 'reviewer']; }
+      function booksSenderStatus(s) { return s in ['Needs receipt', 'Needs review']; }
+      // Private information: the owner, and people the owner has given that kind of access to
+      function booksPrivate(kind) { return booksMember() && (booksRole() == 'owner' || kind in get(booksMemberDoc()).data.get('access', [])); }
+
+      allow read: if booksMember();
+      allow write: if false;
+
+      match /entries/{id}      { allow read: if booksCanRead(); allow write: if false; }
+      match /sources/{id}      { allow read: if booksCanRead(); allow write: if false; }
+      match /audit/{id}        { allow read: if booksCanRead(); allow write: if false; }
+      match /snapshots/{id}    { allow read: if booksCanRead(); allow write: if false; }
+      match /ledger/{doc}      { allow read: if booksCanRead(); allow write: if false; }
+      match /setupHistory/{v}  { allow read: if booksCanRead(); allow write: if false; }
+      match /settings/{doc}    { allow read: if booksMember(); allow write: if false; }
+      match /members/{uid}     { allow read: if booksCanRead() || (request.auth != null && request.auth.uid == uid); allow write: if false; }
+      match /approvals/{id}    { allow read: if booksCanRead(); allow write: if false; }   // recorded by the server
+      match /checkNumbers/{no} { allow read: if booksCanRead(); allow write: if false; }
+      match /alerts/{id}       { allow read: if booksMember() && booksRole() in ['owner', 'admin']; allow write: if false; }
+      match /counts/{id}       { allow read: if booksCanRead() || (booksMember() && booksRole() == 'counter'); allow write: if false; }
+
+      // Who gave what, salaries, medical and benevolence: kept apart, each readable only by those given it
+      match /private/{kind} {
+        allow read: if kind in ['donors', 'payroll', 'medical', 'benevolence'] && booksPrivate(kind);
+        allow write: if kind in ['donors', 'payroll', 'medical', 'benevolence'] && booksPrivate(kind) && (booksCanWork() || booksRole() == 'owner')
+          && request.resource.data.keys().hasOnly(['json', 'updatedAt', 'updatedBy'])
+          && request.resource.data.json is string && request.resource.data.json.size() < 900000;
+      }
+
+      // Everyday work (bills, vendors, checks, reconciliations, file list…): one document per kind,
+      // saved by the people who do the work. Viewers (board, auditor) can only read.
+      match /workspace/{kind} {
+        allow read: if booksCanRead();
+        allow write: if booksCanWork() && kind.matches('^[a-zA-Z]{1,40}$') && !(kind in ['donors', 'staff', 'nonCash', 'payroll', 'medical', 'benevolence'])   // private kinds go in private/
+          && request.resource.data.keys().hasOnly(['json', 'updatedAt', 'updatedBy'])
+          && request.resource.data.json is string && request.resource.data.json.size() < 900000;
+      }
+
+      // Receipts. Anyone in the church can send their own; the people who do the work see and handle all of them.
+      match /expenses/{id} {
+        allow read: if booksCanRead() || (booksMember() && resource.data.senderUid == request.auth.uid);
+        allow create: if booksCanWork()
+          || (booksMember() && request.resource.data.senderUid == request.auth.uid && booksSenderStatus(request.resource.data.status));
+        allow update: if booksCanWork()
+          || (booksMember() && resource.data.senderUid == request.auth.uid && resource.data.status != 'Done'
+              && request.resource.data.senderUid == request.auth.uid && booksSenderStatus(request.resource.data.status));
+        allow delete: if false;
+      }
+    }
+    // ===== END CHURCH BOOKS =====
+
+    match /{document=**} { allow read, write: if false; }
+  }
+}

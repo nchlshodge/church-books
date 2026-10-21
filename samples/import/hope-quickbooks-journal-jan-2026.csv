@@ -1,0 +1,49 @@
+Hope Fellowship
+Journal
+January 2026
+
+Date,Transaction Type,Num,Name,Memo/Description,Account,Class,Debit,Credit
+01/04/2026,Deposit,,,Sunday offering,Checking - First Bank,General,"9,840.00",
+,,,,,Tithes & Offerings,General,,"8,120.00"
+,,,,,Building Fund Gifts,Building Fund,,"1,100.00"
+,,,,,Missions Gifts,Missions,,620.00
+,,,,,,,"$9,840.00","$9,840.00"
+
+01/05/2026,Check,4012,RG&E,December gas & electric,Checking - First Bank,General,,"1,412.33"
+,,,,,Utilities,General,"1,412.33",
+,,,,,,,"$1,412.33","$1,412.33"
+
+01/11/2026,Deposit,,,Sunday offering,Checking - First Bank,General,"10,465.00",
+,,,,,Tithes & Offerings,General,,"8,890.00"
+,,,,,Building Fund Gifts,Building Fund,,950.00
+,,,,,Missions Gifts,Missions,,625.00
+,,,,,,,"$10,465.00","$10,465.00"
+
+01/15/2026,Payroll Check,,Paychex,Payroll Jan 15,Checking - First Bank,General,,"6,900.00"
+,,,,,Salaries & Wages,General,"7,000.00",
+,,,,,Payroll Taxes,General,535.50,
+,,,,,Payroll Liabilities,General,,635.50
+,,,,,,,"$7,535.50","$7,535.50"
+
+01/20/2026,Credit Card Expense,,Amazon,Kids ministry supplies,Church Mastercard,General,,248.17
+,,,,,Ministry Supplies,General,248.17,
+,,,,,,,$248.17,$248.17
+
+01/22/2026,Check,4013,Hope Mission Partners,January support,Checking - First Bank,Missions,,"2,000.00"
+,,,,,Missions Support,Missions,"2,000.00",
+,,,,,,,"$2,000.00","$2,000.00"
+
+01/28/2026,Bill Payment (Check),4014,First Bank,Mortgage payment,Checking - First Bank,General,,"1,650.00"
+,,,,,Mortgage - First Bank,General,830.00,
+,,,,,Mortgage Interest,General,820.00,
+,,,,,,,"$1,650.00","$1,650.00"
+
+01/31/2026,Deposit,,First Bank,Interest,Savings - First Bank,General,31.20,
+,,,,,Interest Income,General,,31.20
+,,,,,,,$31.20,$31.20
+
+01/31/2026,Expense,,First Bank,Service charge,Checking - First Bank,General,,12.00
+,,,,,Bank Service Charges,General,12.00,
+,,,,,,,$12.00,$12.00
+
+TOTAL,,,,,,,"$33,194.20","$33,194.20"

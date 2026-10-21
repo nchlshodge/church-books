@@ -1,0 +1,23 @@
+!TRNS	TRNSID	TRNSTYPE	DATE	ACCNT	NAME	CLASS	AMOUNT	DOCNUM	MEMO
+!SPL	SPLID	TRNSTYPE	DATE	ACCNT	NAME	CLASS	AMOUNT	DOCNUM	MEMO
+!ENDTRNS
+TRNS		DEPOSIT	02/01/2026	Checking - First Bank		General	10215.00		Sunday offering
+SPL		DEPOSIT	02/01/2026	Tithes & Offerings		General	-8500.00		
+SPL		DEPOSIT	02/01/2026	Building Fund Gifts		Building Fund	-1065.00		
+SPL		DEPOSIT	02/01/2026	Missions Gifts		Missions	-650.00		
+ENDTRNS
+TRNS		CHECK	02/05/2026	Checking - First Bank	RG&E	General	-1288.40	4015	January gas & electric
+SPL		CHECK	02/05/2026	Utilities	RG&E	General	1288.40	4015	
+ENDTRNS
+TRNS		CHECK	02/12/2026	Checking - First Bank	Ridge Roofing	Building Fund	-3400.00	4016	Roof leak repair
+SPL		CHECK	02/12/2026	Repairs & Maintenance	Ridge Roofing	Building Fund	3400.00	4016	
+ENDTRNS
+TRNS		CHECK	02/15/2026	Checking - First Bank	Paychex	General	-6900.00		Payroll Feb 15
+SPL		CHECK	02/15/2026	Salaries & Wages	Paychex	General	7000.00		
+SPL		CHECK	02/15/2026	Payroll Taxes	Paychex	General	535.50		
+SPL		CHECK	02/15/2026	Payroll Liabilities	Paychex	General	-635.50		
+ENDTRNS
+TRNS		CHECK	02/26/2026	Checking - First Bank	First Bank	General	-1650.00	4017	Mortgage payment
+SPL		CHECK	02/26/2026	Mortgage - First Bank	First Bank	General	834.00	4017	
+SPL		CHECK	02/26/2026	Mortgage Interest	First Bank	General	816.00	4017	
+ENDTRNS

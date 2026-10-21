@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>Give Online</title>
+<meta name="robots" content="noindex">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@500;600&family=Inter:wght@400;500;600;700&display=swap">
+<style>
+  :root {
+    --brand: #2557b8;
+    --brand-ink: color-mix(in srgb, var(--brand) 72%, #000);
+    --brand-soft: color-mix(in srgb, var(--brand) 9%, #fff);
+    --bg: #f6f2ea; --card: #fff; --ink: #1d1b17; --ink-2: #57514a; --ink-3: #8e877c; --line: #e9e3d7; --line-2: #d9d1c1;
+    --green: #2e7a52; --green-soft: #e2f1e8; --gold-ink: #7a5a14; --gold-soft: #f8f0da; --red: #a8352f; --red-soft: #f9e5e3;
+    --radius: 18px; --shadow: 0 1px 2px rgba(60,40,10,.06), 0 6px 18px rgba(60,40,10,.06); --ease: cubic-bezier(.2,.8,.2,1);
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: Inter, system-ui, -apple-system, sans-serif; background: var(--bg); color: var(--ink); font-size: 16px; line-height: 1.5; -webkit-font-smoothing: antialiased; min-height: 100vh; }
+  h1, h2, h3 { font-family: 'Playfair Display', Georgia, serif; font-weight: 600; letter-spacing: -.01em; line-height: 1.2; }
+  h1 { font-size: clamp(26px, 6vw, 34px); } h2 { font-size: 21px; } h3 { font-size: 18px; }
+  button, input, select { font: inherit; color: inherit; }
+  a { color: var(--brand); }
+  .num { font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .muted { color: var(--ink-3); } .small { font-size: 13.5px; }
+  :focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; }
+
+  /* header */
+  .demo { background: var(--gold-soft); color: var(--gold-ink); font-size: 12.5px; font-weight: 600; text-align: center; padding: 6px 16px; }
+  header { background: rgba(255,255,255,.75); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); border-bottom: 1px solid var(--line); position: sticky; top: 0; z-index: 20; }
+  .bar { max-width: 980px; margin: 0 auto; padding: 10px 16px; display: flex; align-items: center; gap: 12px; }
+  .brand { display: flex; align-items: center; gap: 10px; text-decoration: none; color: var(--ink); min-width: 0; }
+  .brand img { height: 34px; width: auto; max-width: 120px; object-fit: contain; }
+  .brand .mark { width: 34px; height: 34px; border-radius: 10px; background: var(--brand); color: #fff; display: grid; place-items: center; font-weight: 700; font-size: 13px; flex-shrink: 0; }
+  .brand b { font-size: 15px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .tabs { margin-left: auto; display: flex; gap: 4px; background: var(--bg); border-radius: 999px; padding: 3px; flex-shrink: 0; }
+  .tabs a { text-decoration: none; color: var(--ink-2); font-size: 14px; font-weight: 600; padding: 7px 14px; border-radius: 999px; white-space: nowrap; }
+  .tabs a.on { background: #fff; color: var(--brand-ink); box-shadow: 0 1px 3px rgba(0,0,0,.08); }
+
+  main { max-width: 980px; margin: 0 auto; padding: 22px 16px 60px; }
+  .narrow { max-width: 560px; margin: 0 auto; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: var(--shadow); padding: 20px; }
+  .lead { color: var(--ink-2); margin: 6px 0 18px; }
+  .label { display: block; font-size: 13px; font-weight: 600; color: var(--ink-2); margin: 20px 0 8px; letter-spacing: .01em; }
+  .card > .label:first-child { margin-top: 0; }
+
+  /* amount */
+  .amount { display: flex; align-items: center; border: 2px solid var(--line-2); border-radius: 14px; padding: 6px 14px; background: #fff; transition: border-color .15s; }
+  .amount:focus-within { border-color: var(--brand); }
+  .amount span { font-size: 32px; font-weight: 600; color: var(--ink-3); }
+  .amount input { border: none; outline: none; font-size: 38px; font-weight: 700; width: 100%; padding: 2px 4px; background: none; font-variant-numeric: tabular-nums; min-width: 0; }
+  .sheet .amount input { font-size: 28px; } .sheet .amount span { font-size: 24px; }
+  .chips { display: grid; grid-template-columns: repeat(auto-fit, minmax(56px, 1fr)); gap: 6px; margin-top: 10px; }
+  .chip { border: 1px solid var(--line-2); background: #fff; border-radius: 999px; padding: 7px 4px; font-size: 14px; font-weight: 600; cursor: pointer; }
+  .chip:hover { border-color: var(--brand); color: var(--brand-ink); }
+
+  /* choices */
+  .ways { display: grid; gap: 8px; }
+  .opt { display: flex; align-items: center; gap: 12px; border: 1.5px solid var(--line); background: #fff; border-radius: 14px; padding: 12px 14px; cursor: pointer; text-align: left; width: 100%; transition: border-color .15s, background .15s; }
+  .opt:hover { border-color: var(--line-2); }
+  .opt.on { border-color: var(--brand); background: var(--brand-soft); }
+  .dot { width: 12px; height: 12px; border-radius: 50%; flex-shrink: 0; display: block; }
+  .opt .t { font-weight: 600; font-size: 15px; } .opt .s { font-size: 13px; color: var(--ink-3); }
+  .opt .tag { margin-left: auto; font-size: 11.5px; font-weight: 700; color: var(--green); background: var(--green-soft); border-radius: 999px; padding: 2px 8px; white-space: nowrap; }
+  .seg { display: grid; grid-template-columns: repeat(auto-fit, minmax(96px, 1fr)); gap: 6px; }
+  .seg button { border: 1.5px solid var(--line); background: #fff; border-radius: 12px; padding: 10px 6px; font-size: 14px; font-weight: 600; cursor: pointer; }
+  .seg button.on { border-color: var(--brand); background: var(--brand-soft); color: var(--brand-ink); }
+  .row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .field { width: 100%; border: 1.5px solid var(--line-2); border-radius: 12px; padding: 11px 12px; background: #fff; font-size: 16px; outline: none; min-height: 46px; }
+  .field:focus { border-color: var(--brand); }
+  .pay { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .pay .opt { flex-direction: column; align-items: flex-start; gap: 2px; position: relative; padding-top: 14px; }
+  .pay .opt .tag { position: absolute; top: -9px; right: 10px; }
+  .element { margin-top: 10px; border: 1.5px dashed var(--line-2); border-radius: 12px; padding: 12px 14px; background: #fcfbf8; font-size: 14px; }
+  .element .who { font-size: 11.5px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--ink-3); margin-bottom: 6px; }
+  .check { display: flex; gap: 10px; align-items: flex-start; margin-top: 18px; cursor: pointer; font-size: 15px; }
+  .check input { width: 20px; height: 20px; margin-top: 1px; accent-color: var(--brand); flex-shrink: 0; }
+  .sum { margin-top: 18px; padding: 14px; border-radius: 14px; background: var(--bg); font-size: 14.5px; color: var(--ink-2); }
+  .sum b { color: var(--ink); }
+  .err { color: var(--red); font-size: 14px; margin-top: 10px; }
+  .err:empty { display: none; }
+
+  .btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; border: 1px solid var(--line-2); background: #fff; color: var(--ink); border-radius: 12px; padding: 10px 16px; font-weight: 600; font-size: 15px; cursor: pointer; text-decoration: none; transition: transform .1s, background .15s; }
+  .btn:active { transform: scale(.98); }
+  .btn.primary { background: var(--brand); border-color: var(--brand); color: #fff; }
+  .btn.primary:hover { background: var(--brand-ink); }
+  .btn.big { width: 100%; padding: 15px 18px; font-size: 17px; border-radius: 14px; margin-top: 16px; }
+  .btn.sm { padding: 7px 12px; font-size: 13.5px; border-radius: 10px; }
+  .btn.danger { color: var(--red); }
+  .btn.link { border: none; background: none; padding: 0; color: var(--brand); font-weight: 600; }
+  .fine { font-size: 12.5px; color: var(--ink-3); text-align: center; margin-top: 12px; }
+
+  /* my giving */
+  .hello { display: flex; justify-content: space-between; align-items: flex-end; gap: 12px; flex-wrap: wrap; margin-bottom: 18px; }
+  .mine { display: grid; gap: 16px; grid-template-columns: minmax(0, 1fr); align-items: start; }
+  @media (min-width: 860px) { .mine { grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr); } }
+  .stack { display: grid; gap: 16px; min-width: 0; }
+  .card-head { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; margin-bottom: 10px; }
+  .big-num { font-family: 'Playfair Display', serif; font-size: 34px; font-weight: 600; }
+  .pl-n { font-size: clamp(18px, 5vw, 22px); font-weight: 700; }
+  .bars { margin-top: 12px; display: grid; gap: 8px; }
+  .bars .r { display: grid; grid-template-columns: 1fr auto; gap: 4px 10px; font-size: 14px; }
+  .bars i { grid-column: 1 / -1; height: 6px; border-radius: 4px; background: var(--line); overflow: hidden; display: block; }
+  .bars i b { display: block; height: 100%; border-radius: 4px; }
+  .list { list-style: none; }
+  .list li { display: flex; align-items: center; gap: 12px; padding: 11px 0; border-top: 1px solid var(--line); }
+  .list li:first-child { border-top: none; }
+  .list .dot { width: 10px; height: 10px; }
+  .list .grow { flex: 1; min-width: 0; }
+  .list .t { font-weight: 600; font-size: 15px; } .list .s { font-size: 13px; color: var(--ink-3); }
+  .rec { border: 1px solid var(--line); border-radius: 14px; padding: 14px; }
+  .rec + .rec { margin-top: 10px; }
+  .rec .top { display: flex; justify-content: space-between; gap: 10px; align-items: baseline; }
+  .rec .amt { font-size: 20px; font-weight: 700; }
+  .rec .acts { display: flex; gap: 8px; margin-top: 10px; flex-wrap: wrap; }
+  .rec.paused { background: #fbfaf7; } .rec.paused .amt { color: var(--ink-3); }
+  .pill { display: inline-block; font-size: 12px; font-weight: 700; border-radius: 999px; padding: 2px 9px; font-family: Inter, sans-serif; }
+  .pill.gold { background: var(--gold-soft); color: var(--gold-ink); } .pill.gray { background: var(--bg); color: var(--ink-3); }
+  .pledge-acts { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 14px; }
+  .empty { text-align: center; padding: 18px 8px; color: var(--ink-3); font-size: 14.5px; }
+
+  /* thank you */
+  .done { text-align: center; padding: 30px 20px; }
+  .done .ok { width: 64px; height: 64px; border-radius: 50%; background: var(--green-soft); color: var(--green); display: grid; place-items: center; margin: 0 auto 14px; font-size: 32px; animation: pop .4s var(--ease); }
+  @keyframes pop { from { transform: scale(.6); opacity: 0; } }
+  .facts { display: grid; grid-template-columns: auto 1fr; gap: 6px 14px; text-align: left; margin: 18px auto 0; max-width: 380px; font-size: 14.5px; }
+  .facts > span:nth-child(odd) { color: var(--ink-3); }
+
+  /* sheets and toasts */
+  .veil { position: fixed; inset: 0; background: rgba(29,27,23,.4); z-index: 50; display: flex; align-items: flex-end; justify-content: center; animation: fade .15s; }
+  .sheet { background: #fff; width: 100%; max-width: 520px; max-height: 92vh; overflow-y: auto; border-radius: 22px 22px 0 0; padding: 22px 20px calc(22px + env(safe-area-inset-bottom)); animation: up .25s var(--ease); }
+  @media (min-width: 640px) { .veil { align-items: center; padding: 16px; } .sheet { border-radius: 22px; } }
+  .sheet.wide { max-width: 720px; }
+  .sheet .acts { display: flex; gap: 8px; justify-content: flex-end; margin-top: 20px; flex-wrap: wrap; }
+  @keyframes fade { from { opacity: 0; } } @keyframes up { from { transform: translateY(30px); opacity: 0; } }
+  .toast { position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%); background: var(--ink); color: #fff; padding: 11px 18px; border-radius: 12px; font-size: 14.5px; z-index: 60; box-shadow: 0 10px 30px rgba(0,0,0,.2); animation: fade .2s; max-width: calc(100vw - 32px); }
+  .code { letter-spacing: .5em; font-size: 24px; text-align: center; font-weight: 700; }
+  .note { background: var(--gold-soft); color: var(--gold-ink); border-radius: 12px; padding: 10px 12px; font-size: 13.5px; margin-top: 14px; }
+  .stmt table { width: 100%; border-collapse: collapse; font-size: 14px; margin-top: 12px; }
+  .stmt td, .stmt th { padding: 6px 4px; border-bottom: 1px solid var(--line); text-align: left; }
+  .stmt th { font-size: 12px; color: var(--ink-3); font-weight: 600; text-transform: uppercase; letter-spacing: .04em; }
+  .stmt .r { text-align: right; }
+  footer { text-align: center; font-size: 12.5px; color: var(--ink-3); padding: 0 16px 30px; line-height: 1.8; }
+  @media (max-width: 420px) { .row2 { grid-template-columns: 1fr; } .tabs a { padding: 7px 11px; } .brand b { display: none; } .card { padding: 18px 16px; } }
+  @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; transition: none !important; } }
+  @media print {
+    body.printing > *:not(.veil) { display: none !important; }
+    body.printing .veil { position: static; background: none; display: block; }
+    body.printing .sheet { max-width: none; max-height: none; box-shadow: none; padding: 0; }
+    body.printing .sheet .acts { display: none; }
+  }
+</style>
+</head>
+<body>
+<div class="demo">Demo on sample data — no real money moves</div>
+<header><div class="bar" id="bar"></div></header>
+<main id="app"><p class="muted">Loading…</p></main>
+<footer id="foot"></footer>
+<!-- Church Books — the congregation's giving page (mockup on sample data; no real payments).
+     The church comes from ?church=<id> (default rcc): churches/<id>/setup.js for who it is and its ways to give,
+     churches/<id>/sample.js for sample givers, pledges and history. The page itself is app.js.
+     How it would really work, with Stripe Connect: ../docs/giving-site.md. -->
+<script>
+  (function () {
+    const id = (new URLSearchParams(location.search).get('church') || 'rcc').replace(/[^a-z0-9-]/g, '') || 'rcc';
+    window.CHURCH_ID = id;
+    ['../churches/' + id + '/setup.js', '../churches/' + id + '/sample.js', '../engine/pledges.js', '../engine/giving.js', 'app.js'].forEach(src => {
+      const s = document.createElement('script');
+      s.src = src; s.async = false;            // run in order
+      s.onerror = () => { document.getElementById('app').textContent = 'This church’s giving page couldn’t load (' + src + ').'; };
+      document.body.appendChild(s);
+    });
+  })();
+</script>
+</body>
+</html>

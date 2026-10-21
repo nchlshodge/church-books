@@ -1,0 +1,12 @@
+# Downloaded libraries (npm install brings them back)
+node_modules/
+# Settings for each Firebase project (who the platform admins are) — kept on this computer only
+.env*
+# Emulator logs and the emulator's made-up test sign-ins
+*.log
+firebase/emulator-users.json
+# Built by `npm run sync-engine` in firebase/functions (a copy of engine/)
+firebase/functions/engine/
+# Working files from the bedsidercc go-live
+firebase/golive/
+.DS_Store
