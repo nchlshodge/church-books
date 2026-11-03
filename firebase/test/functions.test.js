@@ -104,3 +104,20 @@ test('the server knows the newer accounts: non-cash gifts, donated items, rental
   const bad = { ...setup, funds: [...setup.funds, { id: 'res2', name: 'Bad', restriction: 'with', designated: true }] };
   assert.strictEqual(await code(c.owner.call('booksUpdateSetup', { orgId: o, setup: bad })), 'failed-precondition');
 });
+
+test('Planning Center morning pull (test data): one payout per day, refunds and cash left out, never twice', async () => {
+  const o = org + 'pco', c = await makeOrg(o, { 'owner-pco@t.org': ['owner', 'lee'], 'viewer-pco@t.org': ['viewer'] });
+  const d = (id, at, cents, fee, fund, extra = {}) => ({ id, completed_at: at, amount_cents: cents, fee_cents: -fee, payment_method: 'card', designations: [{ fund, amount_cents: cents }], ...extra });
+  await db.doc(`orgs/${o}/connections/pco`).set({ status: 'connected', mode: 'test', funds: { 'General Fund': 'offering', Missions: 'missions' }, testDonations: [
+    d(1, '2026-10-18T14:00:00Z', 10000, 320, 'General Fund'), d(2, '2026-10-18T18:00:00Z', 4000, 150, 'Missions'),
+    d(3, '2026-10-18T19:00:00Z', 2500, 100, 'Missions', { refunded: true }), d(4, '2026-10-18T15:00:00Z', 2000, 0, 'General Fund', { payment_method: 'cash' }),
+    d(5, '2026-10-19T14:00:00Z', 9999, 300, 'General Fund') ] });   // the 19th is "today" — not pulled yet
+  assert.strictEqual(await code(c.viewer.call('booksPcoPullNow', { orgId: o, today: '2026-10-19' })), 'permission-denied');
+  const r = await c.owner.call('booksPcoPullNow', { orgId: o, today: '2026-10-19' });
+  assert.deepStrictEqual([r.added, r.through], [1, '2026-10-18']);
+  const payouts = JSON.parse((await db.doc(`orgs/${o}/workspace/payouts`).get()).data().json);
+  assert.deepStrictEqual(payouts.map(p => [p.date, p.gifts, p.split, p.fee, p.net, p.status]), [['Oct 18', 2, { offering: 100, missions: 40 }, 4.7, 135.3, 'New']]);
+  assert.strictEqual((await c.owner.call('booksPcoPullNow', { orgId: o, today: '2026-10-19' })).added, 0);   // already pulled
+  await db.doc(`orgs/${o}/connections/pco`).set({ mode: 'live' }, { merge: true });
+  assert.strictEqual(await code(c.owner.call('booksPcoPullNow', { orgId: o, today: '2026-10-20' })), 'failed-precondition');   // live isn't on yet
+});

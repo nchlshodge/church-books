@@ -427,3 +427,51 @@ exports.booksLeaderReport = onCall(async req => {
   r.lines = r.lines.map(l => pay.has(l.account) ? { ...l, party: null, memo: 'Staff pay' } : l);   // no individual pay in a leader's report
   return { budget: b.name, amount: Math.round((b.budget || 0) * 100), lead: b.lead || null, date: b.date || null, names, report: r, mine: who.role === 'leader' ? who.budgets : null };
 });
+
+// ---------- Planning Center Giving: the morning pull ----------
+// Every morning at 6:00 each connected church's completed online gifts from the days since the last pull are added up
+// into one payout per day (engine/pco.js) and saved with the church's other payouts as "New". The app then records each
+// one by itself when the bank deposit matches (engine/autopost.js) or sets it aside to "need a look".
+// The connection lives at orgs/{org}/connections/pco: { status: 'connected', mode: 'test' | 'live', funds: { PCO fund: giving id },
+// lastDay, testDonations? }. Test mode reads sample donations saved on that record — nothing reaches Planning Center.
+// Live mode will read Planning Center's API with the church's own sign-in (OAuth; the access key kept in Secret Manager,
+// never in Firestore). It isn't switched on yet.
+const Pco = require('./engine/pco.js');
+const { onSchedule } = require('firebase-functions/v2/scheduler');
+const localDay = (iso, tz) => new Date(iso).toLocaleDateString('en-CA', { timeZone: tz || 'America/New_York' });   // 'YYYY-MM-DD'
+const shortDay = ymd => new Date(ymd + 'T12:00:00Z').toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' });
+const dayBefore = ymd => { const d = new Date(ymd + 'T12:00:00Z'); d.setUTCDate(d.getUTCDate() - 1); return d.toISOString().slice(0, 10); };
+async function pcoDonations(conn) {
+  if (conn.mode === 'test') return conn.testDonations || [];
+  throw new HttpsError('failed-precondition', 'The live Planning Center connection isn\'t switched on yet — this church is set up for test data only');
+}
+async function pullPlanningCenter(orgId, today) {
+  const connRef = db.doc(`orgs/${orgId}/connections/pco`), conn = (await connRef.get()).data();
+  if (!conn || conn.status !== 'connected') return { skipped: 'not connected' };
+  const setup = (await db.doc(`orgs/${orgId}/settings/setup`).get()).data() || {}, tz = setup.timezone;
+  const through = dayBefore(today || localDay(now(), tz)), after = conn.lastDay || dayBefore(through);   // yesterday and anything missed since
+  const days = Pco.days(await pcoDonations(conn), { funds: conn.funds || {}, dateOf: s => localDay(s, tz) }).filter(d => d.date > after && d.date <= through);
+  const wsRef = db.doc(`orgs/${orgId}/workspace/payouts`);
+  const added = await db.runTransaction(async tx => {
+    const doc = await tx.get(wsRef), payouts = doc.exists ? JSON.parse(doc.data().json || '[]') : [];
+    const fresh = days.filter(d => !payouts.some(p => p.source && p.source.id === d.date && p.source.type === 'pco_day'))
+      .map(d => ({ date: shortDay(d.date), gifts: d.gifts, split: Object.fromEntries(Object.entries(d.split).map(([k, v]) => [k, v / 100])), fee: d.fee / 100, net: d.net / 100,
+        status: 'New', source: d.source, from: 'Planning Center', pulledAt: now() }));
+    if (fresh.length) tx.set(wsRef, { json: JSON.stringify([...fresh.reverse(), ...payouts]), updatedAt: now(), updatedBy: 'Planning Center (morning pull)' });
+    tx.set(connRef, { lastDay: through, lastPull: now(), lastFound: fresh.length }, { merge: true });
+    return fresh.length;
+  });
+  return { days: days.length, added, through };
+}
+exports.booksPcoMorningPull = onSchedule({ schedule: 'every day 06:00', timeZone: 'America/New_York' }, async () => {
+  for (const o of (await db.collection('orgs').get()).docs) {   // a church at a time; one church's problem doesn't stop the rest
+    try { await pullPlanningCenter(o.id); } catch (e) { console.error('Planning Center pull failed', o.id, e.message); }
+  }
+});
+// "Check now" — the same pull, on demand. today (optional, 'YYYY-MM-DD') is for tests.
+exports.booksPcoPullNow = onCall(async req => {
+  const { orgId, today } = req.data || {};
+  await memberOf(req, orgId, CAN_POST);
+  if (today != null && !ISO.test(today)) throw bad('today is a date like 2026-10-19');
+  return pullPlanningCenter(orgId, today);
+});

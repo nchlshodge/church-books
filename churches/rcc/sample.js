@@ -13,7 +13,10 @@
   payouts: [
   // push: the part of a giving fund's amount that was given to a giving push (a fund or label in the giving system)
   { date: 'Oct 17', gifts: 31,  split: { tithe: 4860.00, missions: 1230.00, legacy: 650.00 }, push: { 'h-oct': 90 }, fee: 77.03, status: 'New' },
+  { date: 'Oct 16', gifts: 24,  split: { tithe: 3980.00, missions: 610.00, legacy: 400.00 }, fee: 64.10, status: 'New' },   // its deposit hasn't reached the bank yet
   { date: 'Oct 15', gifts: 212, split: { tithe: 22640.00, missions: 5940.00, legacy: 2350.00, reno: 100.00, benev: 75.00 }, push: { 'h-oct': 540 }, fee: 352.85, status: 'Recorded' },
+  // net = what the giving system says it sent; $50 less than the gifts minus the fee (a refunded gift) → needs a look
+  { date: 'Oct 14', gifts: 26,  split: { tithe: 4210.00, missions: 520.00, legacy: 300.00 }, fee: 66.20, net: 4913.80, status: 'New' },
   { date: 'Oct 13', gifts: 27,  split: { tithe: 3920.00, missions: 780.00, legacy: 400.00 }, push: { 'h-oct': 120 }, fee: 59.54, status: 'Recorded' },
   { date: 'Oct 8',  gifts: 236, split: { tithe: 24180.00, missions: 6720.00, legacy: 2880.00, benev: 120.00 }, push: { 'h-oct': 650 }, fee: 382.98, status: 'Recorded' },
   { date: 'Oct 6',  gifts: 30,  split: { tithe: 4410.00, missions: 900.00, legacy: 500.00 }, push: { 'h-oct': 80 }, fee: 67.83, status: 'Recorded' },
