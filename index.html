@@ -260,9 +260,22 @@
   @media print {
     @page { size: letter; margin: 0; }
     body { background: #fff !important; }
-    body > *:not(#printArea) { display: none !important; }
-    #printArea { display: block !important; }
+    /* A 🖨 button's print-out (checks, statements, the board packet): only that */
+    body.print-area > *:not(#printArea) { display: none !important; }
+    body.print-area #printArea { display: block !important; }
     .ck-page { page-break-after: always; break-after: page; }
+    /* ⌘P anywhere else: the page you're on (or the open panel), without the menu, buttons or toolbars */
+    body:not(.print-area) #printArea, body:not(.print-area) .side, body:not(.print-area) .topbar, .navscrim, #newMenu, .toast { display: none !important; }
+    body:not(.print-area) .app { display: block !important; }
+    body:not(.print-area) .main { padding: 0.55in 0.6in !important; -webkit-box-decoration-break: clone; box-decoration-break: clone; }   /* the page margin is 0 (for checks), so the padding repeats on every sheet */
+    body:not(.print-area) .acts, body:not(.print-area) .btn, body:not(.print-area) .linkbtn, body:not(.print-area) .drop, body:not(.print-area) details.acct > summary::marker { display: none !important; }
+    body:not(.print-area) .card { box-shadow: none !important; break-inside: avoid; }
+    body:not(.print-area) .tablewrap { overflow: visible !important; max-height: none !important; }
+    body:not(.print-area) input, body:not(.print-area) select { border: none !important; background: none !important; -webkit-appearance: none; appearance: none; }
+    body.print-panel:not(.print-area) .app, body.print-panel:not(.print-area) .scrim { display: none !important; }
+    body.print-panel:not(.print-area) .panel { position: static !important; transform: none !important; width: auto !important; box-shadow: none !important; padding: 0.55in 0.6in; height: auto !important; -webkit-box-decoration-break: clone; box-decoration-break: clone; }
+    body.print-panel:not(.print-area) .panel-head, body.print-panel:not(.print-area) .panel-actions { display: none !important; }
+    body.print-panel:not(.print-area) .panel-body { overflow: visible !important; }
   }
 
   .recon-sum { position: sticky; top: 76px; }
@@ -1268,7 +1281,10 @@ function checkPage(c, no, test) {
     ${stub('Payee copy — keep for your records')}${stub('Church copy')}
   </div></div>`;
 }
-function sendToPrinter(html) { $('#printArea').innerHTML = html; window.print(); }
+function sendToPrinter(html) { $('#printArea').innerHTML = html; document.body.classList.add('print-area'); window.print(); }
+// ⌘P prints what's on screen (the open panel if there is one); a 🖨 button's print-out is cleared afterwards
+addEventListener('beforeprint', () => { if (!document.body.classList.contains('print-area')) document.body.classList.toggle('print-panel', $('#panel').classList.contains('show')); });
+addEventListener('afterprint', () => { document.body.classList.remove('print-area', 'print-panel'); $('#printArea').innerHTML = ''; });
 function positivePayCsv() {
   const b = ckBank(), q = x => `"${String(x).replace(/"/g, '""')}"`;
   const rows = CHECKS.filter(c => c.no && ((c.status === 'Outstanding' && !c.ppSent) || (c.status === 'Void' && c.ppSent && !c.ppVoidSent)));
