@@ -234,13 +234,13 @@ exports.booksImport = onCall({ timeoutSeconds: 300, memory: '1GiB' }, async req 
     if (e.reverses) { batch.set(org.collection('sources').doc(srcKey({ type: 'reversal', id: e.reverses })), { entryId: e.id }); n++; }
     prev = entry.hash; await flush();
   }
-  const ws = data.workspace || {}, privOf = { donors: 'donors', nonCash: 'donors', pledges: 'donors', staff: 'payroll' };
+  const ws = data.workspace || {}, privOf = { donors: 'donors', nonCash: 'donors', pledges: 'donors', staff: 'payroll', compPlan: 'payroll' };
   Object.entries(ws).forEach(([kind, json]) => { if (privOf[kind] || !/^[a-zA-Z]{1,40}$/.test(kind) || typeof json !== 'string' || json.length >= 900000) return;
     batch.set(org.collection('workspace').doc(kind), { json, updatedAt: at, updatedBy: who.name || who.uid }); n++; });
   // who gave what and salaries go to private/, readable only by the owner and people given access
   const pj = k => { try { return JSON.parse(ws[k] || 'null') || []; } catch (e) { return []; } };
   batch.set(org.collection('private').doc('donors'), { json: JSON.stringify({ donors: pj('donors'), nonCash: pj('nonCash'), pledges: pj('pledges') }), updatedAt: at, updatedBy: who.name || who.uid });
-  batch.set(org.collection('private').doc('payroll'), { json: JSON.stringify({ staff: pj('staff') }), updatedAt: at, updatedBy: who.name || who.uid }); n += 2;
+  batch.set(org.collection('private').doc('payroll'), { json: JSON.stringify({ staff: pj('staff'), compPlan: (() => { try { return JSON.parse(ws.compPlan || 'null'); } catch (e) { return null; } })() }), updatedAt: at, updatedBy: who.name || who.uid }); n += 2;
   (data.expenses || []).forEach(x => { if (x && x.id) { batch.set(org.collection('expenses').doc(String(x.id)), { json: JSON.stringify(x), status: x.status || 'Needs receipt', senderUid: null }); n++; } });
   await flush(true);
   const used = k => [...new Set(L.entries.flatMap(e => e.lines.map(l => l[k])))].sort();

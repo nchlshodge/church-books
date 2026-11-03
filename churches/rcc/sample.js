@@ -189,6 +189,40 @@
   { role: 'Bookkeeper (part-time)',   type: 'Employee', gross: 2500.00, fund: 'gen' },
   { role: 'Administrative Assistant', type: 'Employee', gross: 3000.00, fund: 'gen' },
 ],
+  // Staff pay and raises (made-up people and amounts). Grades: a full-time midpoint; the range is ±15% and a person
+  // moves from the bottom toward the top over 15 years, prorated by hours. now = 2026, next = what's proposed for 2027.
+  // Amounts are yearly. this year's salary + housing matches the payroll above (gross × 12).
+  compPlan: {
+    year: 2027, spread: 0.15, yearsToMax: 15, fullTimeHours: 40, minWage: 15.00,
+    grades: [
+      { id: 1, name: 'Part-time technical', midpoint: 40000 }, { id: 2, name: 'Administrative support', midpoint: 50000 }, { id: 3, name: 'Professional staff', midpoint: 60000 },
+      { id: 4, name: 'Ministry pastor', midpoint: 66000 }, { id: 5, name: 'Senior staff pastor', midpoint: 84000 }, { id: 6, name: 'Lead Pastor', midpoint: 108000 },
+    ],
+    people: [
+      { role: 'Lead Pastor', name: 'Daniel Reyes', color: '#2a9d8f', grade: 6, hours: 45, years: 14, ftBenefits: true,
+        now: { salary: 78400, housing: 32000, health: 21600, retirement: 2260, appreciation: 1000, christmas: 1500 }, next: { salary: 81000, housing: 33000, health: 22900, retirement: 2350, appreciation: 1000, christmas: 1500 } },
+      { role: 'Executive Pastor', name: 'Grace Whitfield', color: '#e76f51', grade: 5, hours: 45, years: 9, ftBenefits: true,
+        now: { salary: 64800, housing: 24000, health: 21600, retirement: 1610, appreciation: 750, christmas: 1200 }, next: { salary: 66000, housing: 26000, health: 22900, retirement: 1650, appreciation: 750, christmas: 1200 } },
+      { role: 'Worship Pastor', name: 'Eli Navarro', color: '#7b5ea7', grade: 5, hours: 40, years: 6, ftBenefits: true,
+        now: { salary: 52800, housing: 18000, health: 14400, retirement: 1385, appreciation: 500, christmas: 1000 }, next: { salary: 54000, housing: 19200, health: 15300, retirement: 1415, appreciation: 500, christmas: 1000 } },
+      { role: 'Youth Pastor', name: 'Sam Rivera', color: '#3a86ff', grade: 4, hours: 40, years: 4, ftBenefits: true,
+        now: { salary: 46200, housing: 15000, health: 14400, retirement: 1265, appreciation: 500, christmas: 1000 }, next: { salary: 48000, housing: 16000, health: 15300, retirement: 1300, appreciation: 500, christmas: 1000 } },
+      { role: 'Missions & Outreach Pastor', name: 'Ruth Calloway', color: '#2e7a52', grade: 4, hours: 40, years: 7, ftBenefits: true,
+        now: { salary: 48600, housing: 15000, health: 14400, retirement: 1295, appreciation: 500, christmas: 1000 }, next: { salary: 49500, housing: 16000, health: 15300, retirement: 1320, appreciation: 500, christmas: 1000 } },
+      { role: 'Kids Director', name: 'Jenna Park', color: '#f4a261', grade: 3, hours: 40, years: 5,
+        now: { salary: 56400, health: 6000, christmas: 750 }, next: { salary: 58100, health: 6400, christmas: 750 } },
+      { role: 'Office Manager', name: 'Dana Brooks', color: '#e63973', grade: 2, hours: 40, years: 11,
+        now: { salary: 52800, health: 6000, christmas: 750 }, next: { salary: 54400, health: 6400, christmas: 750 } },
+      { role: 'Facilities Manager', name: 'Marcus Hill', color: '#8d6e63', grade: 3, hours: 40, years: 8,
+        now: { salary: 49200, health: 6000, christmas: 750 }, next: { salary: 50700, health: 6400, christmas: 750 } },
+      { role: 'Media Director', name: 'Theo Lindgren', color: '#5c6bc0', grade: 3, hours: 40, years: 3,
+        now: { salary: 51600, health: 6000, christmas: 750 }, next: { salary: 53200, health: 6400, christmas: 750 } },
+      { role: 'Bookkeeper (part-time)', name: 'Carol Bennett', color: '#26a69a', grade: 3, hours: 25, years: 20,
+        now: { salary: 30000, christmas: 500 }, next: { salary: 30900, christmas: 500 } },
+      { role: 'Administrative Assistant', name: 'Maya Torres', color: '#ef8354', grade: 2, hours: 30, years: 1,
+        now: { salary: 36000, christmas: 500 }, next: { salary: 37100, christmas: 500 } },
+    ],
+  },
   // Gifts of something other than money. value = the church's fair value for its own books (never printed on the
   // donor's receipt). use: sell (→ 1300 until sold), keep (→ 1600 equipment & vehicles) or expense (used up → that account).
   nonCash: [

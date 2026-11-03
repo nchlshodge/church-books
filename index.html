@@ -386,6 +386,7 @@
 <script src="engine/switchplan.js"></script>
 <script src="engine/pledges.js"></script>
 <script src="engine/importer.js"></script>
+<script src="engine/compensation.js"></script>
 <script src="engine/subscriptions.js"></script>
 <script src="engine/assets.js"></script>
 <script src="engine/setup.js"></script>
@@ -672,6 +673,7 @@ const NAV = [
     { k: 'checks', l: 'Checks', i: 'check' },
     { k: 'partners', l: 'Partners', i: 'globe', show: () => PARTNERS.length > 0 || FUNDS.some(f => f.partners), badge: () => PARTNERS.filter(p => p.status === 'Requested').length + PARTNERS.filter(p => p.status === 'Approved' && !p.ours && pStand(p).due).length + totDue().length },
     { k: 'payroll', l: 'Payroll', i: 'people' },
+    { k: 'staffpay', l: 'Staff pay & raises', i: 'people', show: () => !!COMP && canSeePay() },
     { k: 'kbswitch', l: 'Kingdom Builders plan', i: 'globe', show: () => !KB_ON() && FUNDS.some(f => f.partners) && isAdmin() },
   ]},
   { h: 'Keep track', items: [
@@ -1509,6 +1511,7 @@ V.payroll = () => {
   <div class="card mb"><h2>Payroll cost by budget this year</h2><div class="sub">Pay, housing allowance and employer taxes, from the books</div>
     ${(() => { const rows = PROJECTS.map(p => ({ p, n: BOOKS.accounts.filter(a => a.sub === 'payroll' && a.type === 'expense').reduce((s, a) => s + BOOKS.natural(a.code, { project: p.name, from: BUDGET_FROM }), 0) / 100 })).filter(r => r.n);
       return rows.map(r => `<div class="fund" style="padding:8px 0"><span class="dot" style="background:${fund(r.p.fund).color}"></span><div class="nm" style="font-weight:500">${esc(r.p.name)}<small>${esc(fund(r.p.fund).name)}</small></div><div class="num">${fmt(r.n)}</div></div>`).join(''); })()}</div>
+  ${COMP && canSeePay() ? `<div class="card mb click" data-go="staffpay" style="cursor:pointer"><div class="card-head"><h2>Staff pay & raises for ${COMP.year}</h2><span class="muted">Open →</span></div><div class="sub">${fc(cmpSummary().next.pay)} proposed · ${pctTxt(cmpSummary().raise.pct)} over ${COMP.year - 1} · personal statements for each person</div></div>` : ''}
   <div class="note">Ministers pay their own Social Security (SECA), so no FICA is withheld from their pay. ${PAY_SRC} handles tax filings, W-2s and deposits — this screen only records the cost in the books.</div>`;
 };
 
@@ -4128,6 +4131,109 @@ V.kbswitch = () => {
         .map(([k, t]) => `<div class="chk done"><span class="box">✓</span><span><b>${k}:</b> ${t}</span></div>`).join('')}
       <p class="muted small" style="margin-top:8px">To see the books after the switch, open the <a href="?church=rcc-kb">Kingdom Builders sample</a>.</p></div>`;
 };
+/* ---------- Staff pay & raises ----------
+   Each person's pay this year and what's proposed for next, set against pay grades (a range that people move up
+   with years of service, prorated by hours, never below minimum wage), with the whole package and the cost to the
+   church. Private: only people with payroll access see it. Warm personal statements for each person. engine/compensation.js */
+const CMP = BooksComp;
+const COMP = saved('compPlan', null) || copy(SAMPLE.compPlan || null);
+const canSeePay = () => isAdmin() && (!window.CLOUD || CLOUD.role === 'owner' || (CLOUD.access || []).includes('payroll'));
+const cmpCents = pkg => Object.fromEntries(Object.entries(pkg || {}).map(([k, v]) => [k, cents(+v || 0)]));
+const cmpClergy = p => { if (p.clergy != null) return !!p.clergy; const s = STAFF.find(x => x.role === p.role); return !!(s && s.type === 'Clergy'); };
+const cmpGrade = p => COMP.grades.find(g => g.id === +p.grade);
+const cmpTarget = p => { const g = cmpGrade(p); return g ? CMP.target({ years: +p.years || 0, hours: +p.hours || COMP.fullTimeHours }, { midpoint: cents(g.midpoint) }, { spread: COMP.spread, yearsToMax: COMP.yearsToMax, fullTimeHours: COMP.fullTimeHours, minWage: cents(COMP.minWage || 0) }) : null; };
+const cmpRow = p => { const clergy = cmpClergy(p), now = CMP.total(cmpCents(p.now), { clergy }), next = CMP.total(cmpCents(p.next), { clergy });
+  return { p, clergy, now, next, raise: CMP.change(now.pay, next.pay), up: CMP.change(now.comp, next.comp), target: cmpTarget(p) }; };
+const cmpSummary = () => CMP.summary(COMP.people.map(p => ({ clergy: cmpClergy(p), now: cmpCents(p.now), next: cmpCents(p.next), target: cmpTarget(p) })));
+const pctTxt = x => x == null ? '—' : `${x >= 0 ? '+' : ''}${(x * 100).toFixed(1)}%`;
+const firstName = n => String(n || '').trim().split(/\s+/)[0] || 'friend';
+// Change someone's pay for next year: the housing allowance stays as designated, the rest is salary
+const cmpSetPay = (p, dollars) => { const h = +(p.next.housing || 0); p.next.salary = Math.max(0, Math.round((dollars - h) * 100) / 100); };
+function payStatementHTML(r) {
+  const p = r.p, c = p.color || '#2557b8', Y = COMP.year, nx = cmpCents(p.next), nw = cmpCents(p.now), up = r.up.amount;
+  return `<div class="letter" style="border-top:6px solid ${c}">
+    <div style="background:${c};color:#fff;border-radius:14px;padding:14px 18px;font-weight:600;font-size:16px">🎉 Here's what the church is investing in you for ${Y}.</div>
+    <h3 style="margin:18px 0 2px;font-size:24px">Hi, ${esc(firstName(p.name))}! 👋</h3><p class="muted" style="margin-top:0">${esc(p.role)} · ${esc(SETUP.name)}</p>
+    <table class="t" style="margin-top:10px"><tr><th></th><th class="r">${Y - 1}</th><th class="r">${Y}</th></tr>
+      ${CMP.ITEMS.filter(i => nx[i.key] || nw[i.key]).map(i => `<tr><td>${i.icon} ${esc(i.label)}</td><td class="r num muted">${fc(nw[i.key] || 0)}</td><td class="r num"><b>${fc(nx[i.key] || 0)}</b></td></tr>`).join('')}</table>
+    <div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap;margin:18px 0;padding:16px 18px;border:2px solid ${c};border-radius:14px">
+      <div><div class="muted small">⭐ Total compensation for ${Y}</div><div class="num" style="font-size:30px;font-weight:800;color:${c}">${fc(r.next.comp)}</div></div>
+      <div style="font-weight:600">${up > 0 ? `Up ${fc(up)} from ${Y - 1} 📈` : up < 0 ? `${fc(-up)} less than ${Y - 1}` : `The same as ${Y - 1}`}</div></div>
+    ${r.clergy && nx.housing ? `<p class="small">🏠 ${fc(nx.housing)} of your pay is designated as housing allowance by the board before January 1. It's part of your pay, not on top of it, and it lowers your income tax.</p>` : ''}
+    ${r.clergy ? '<p class="small">As a minister you pay your own Social Security and Medicare (SECA) — plan to set some aside each quarter.</p>' : ''}
+    <p style="margin-top:18px;font-size:16px">💙 Thank you for all you do to serve our church family!</p>
+    <p class="muted small">${esc(SETUP.name)} · Staff pay ${Y} · Private</p></div>`;
+}
+V.staffpay = () => {
+  if (!COMP) return `<div class="vhead"><div><h1>Staff pay & raises</h1><p>No pay plan yet.</p></div></div>`;
+  if (!canSeePay()) return `<div class="vhead"><div><h1>Staff pay & raises</h1><p>Only people with payroll access can see pay.</p></div></div>`;
+  const Y = COMP.year, rows = COMP.people.map(cmpRow), s = cmpSummary(), bud = (PLAN && PLAN.lines.find(l => /^staff/i.test(l.name) && !l.parent)) || null, cur = PROJECTS.find(p => /^staff/i.test(p.name) && !p.parent);
+  const budAmt = bud ? cents(bud.amount || 0) : cur ? cents(cur.budget) : 0;
+  return `<div class="vhead"><div><span class="eyebrow">Private · payroll access only</span><h1>Staff pay & raises</h1><p>${Y - 1} pay and what's proposed for ${Y}, against the pay grades the board sets. Type over a ${Y} amount and everything updates.</p></div>
+      <div class="acts"><button class="btn" data-open="cmpall">Raise everyone…</button><button class="btn" data-cmpprintall>🖨 All statements</button><button class="btn primary" data-cmpplan>Put in the ${Y} budget</button></div></div>
+    <div class="grid g4 mb">
+      <div class="card stat"><div class="k">Pay in ${Y - 1}</div><div class="v num">${fc(s.now.pay)}</div><div class="d">${rows.length} people · salary + housing</div></div>
+      <div class="card stat"><div class="k">Proposed for ${Y}</div><div class="v num">${fc(s.next.pay)}</div><div class="d ${s.raise.amount >= 0 ? 'up' : 'warn'}">${s.raise.amount >= 0 ? '+' : ''}${fc(s.raise.amount)} · ${pctTxt(s.raise.pct)}</div></div>
+      <div class="card stat"><div class="k">Cost to the church, ${Y}</div><div class="v num">${fc(s.next.cost)}</div><div class="d">Pay, benefits, gifts and ${fc(s.next.tax)} employer taxes</div></div>
+      <div class="card stat"><div class="k">${bud ? `${Y} budget plan` : 'Staff & payroll budget'}</div><div class="v num">${fc(budAmt)}</div><div class="d ${budAmt >= s.next.cost ? 'up' : 'warn'}">${budAmt ? (budAmt >= s.next.cost ? `${fc(budAmt - s.next.cost)} to spare` : `${fc(s.next.cost - budAmt)} short`) : 'No budget line'}</div></div></div>
+    ${s.belowRange || s.belowFloor ? `<div class="note gold mb">${s.belowRange ? `<b>${s.belowRange} ${s.belowRange === 1 ? 'person is' : 'people are'} below the bottom of their pay range</b> for ${Y}. ` : ''}${s.belowFloor ? `<b>${s.belowFloor} below minimum wage</b> for their hours.` : ''}</div>` : ''}
+    <div class="card mb"><h2>Each person</h2><div class="sub">The range is their grade's, prorated by hours; the aim moves from the bottom toward the top over ${COMP.yearsToMax} years</div>
+      <div class="tablewrap"><table class="t"><thead><tr><th>Person</th><th>Grade</th><th class="r">${Y - 1} pay</th><th class="r">${Y} pay</th><th class="r">Raise</th><th>${Y} range · aim</th><th class="r">Whole package</th><th></th></tr></thead><tbody>
+      ${rows.map((r, i) => { const t = r.target, pay = r.next.pay, flag = t ? (pay < t.min ? ['red', 'Below range'] : pay < t.amount ? ['gold', 'Under aim'] : pay > t.max ? ['blue', 'Above range'] : ['green', 'In range']) : null;
+        return `<tr><td><span class="dot" style="display:inline-block;background:${r.p.color || '#999'};margin-right:8px"></span><b>${esc(r.p.name)}</b><div class="muted small">${esc(r.p.role)}${r.clergy ? ' · minister' : ''} · ${r.p.hours} hrs · ${r.p.years} yr${+r.p.years === 1 ? '' : 's'}</div></td>
+          <td class="small">${esc((cmpGrade(r.p) || {}).name || '—')}</td><td class="r num">${fc(r.now.pay)}</td>
+          <td class="r"><input type="number" step="100" data-cmppay="${i}" value="${(pay / 100).toFixed(0)}" style="width:110px;text-align:right"></td>
+          <td class="r num ${r.raise.amount < 0 ? 'neg' : ''}">${fc(r.raise.amount)}<div class="muted small">${pctTxt(r.raise.pct)}</div></td>
+          <td class="small">${t ? `${fc(t.min)} – ${fc(t.max)}<div>aim ${fc(t.amount)} ${flag ? `<span class="pill ${flag[0]}">${flag[1]}</span>` : ''}</div>` : '—'}</td>
+          <td class="r num">${fc(r.next.comp)}</td>
+          <td class="r" style="white-space:nowrap"><button class="btn small soft" data-cmpedit="${i}">Edit</button> <button class="btn small soft" data-cmpstmt="${i}">Statement</button></td></tr>`; }).join('')}
+      <tr class="tot"><td colspan="2"><b>Everyone</b></td><td class="r num"><b>${fc(s.now.pay)}</b></td><td class="r num"><b>${fc(s.next.pay)}</b></td><td class="r num"><b>${fc(s.raise.amount)}</b><div class="muted small">${pctTxt(s.raise.pct)}</div></td><td></td><td class="r num"><b>${fc(s.next.comp)}</b></td><td></td></tr>
+      </tbody></table></div></div>
+    <div class="grid g2" style="align-items:start">
+      <div class="card"><h2>Pay grades</h2><div class="sub">The board sets each midpoint (full-time, per year). The range is ±${Math.round(COMP.spread * 100)}%.</div>
+        <table class="t"><thead><tr><th>Grade</th><th class="r">Bottom</th><th class="r">Midpoint</th><th class="r">Top</th></tr></thead><tbody>
+        ${COMP.grades.map((g, gi) => { const r = CMP.range({ midpoint: cents(g.midpoint) }, COMP.spread); return `<tr><td>${g.id} · ${esc(g.name)}</td><td class="r num muted">${fc(r.min)}</td><td class="r"><input type="number" step="1000" data-cmpgrade="${gi}" value="${g.midpoint}" style="width:100px;text-align:right"></td><td class="r num muted">${fc(r.max)}</td></tr>`; }).join('')}</tbody></table>
+        <div class="row2" style="margin-top:10px"><div class="f"><label>Years to reach the top</label><input type="number" id="cmpYears" min="1" value="${COMP.yearsToMax}"></div><div class="f"><label>Minimum wage, ${Y} ($/hr)</label><input type="number" id="cmpMinWage" step="0.05" value="${COMP.minWage || 0}"></div></div></div>
+      <div class="card"><h2>Good to know</h2>
+        ${[['Ministers', 'The church pays no employer Social Security or Medicare for credentialed ministers — they pay SECA themselves. Everyone else adds 7.65% to the church\'s cost.'],
+           ['Housing allowance', 'The board designates it before January 1. It splits the same pay into salary and housing for the pastor\'s tax benefit; it doesn\'t change what the church spends.'],
+           ['Benefits are on top of pay', 'Health, retirement and other benefits are separate lines, so a raise in pay never hides inside a benefit change.'],
+           ['Gifts are wages', 'Christmas bonuses and appreciation gifts in cash go through payroll and count as taxable pay.'],
+           ['Private', 'Only the owner and people given payroll access see this page. Each person gets only their own statement.']]
+          .map(([k, t]) => `<div class="chk done"><span class="box">✓</span><span><b>${k}:</b> ${t}</span></div>`).join('')}</div></div>`;
+};
+P.cmpedit = i => {
+  const p = COMP.people[i], Y = COMP.year, r = cmpRow(p);
+  return { kicker: 'Staff pay & raises', body: `<h2>${esc(p.name)}</h2><p class="lead">${esc(p.role)} · ${Y - 1} package ${fc(r.now.comp)}</p>
+    <div class="row2"><div class="f"><label>Name</label><input id="ceN" value="${esc(p.name)}"></div><div class="f"><label>Color on their statement</label><input id="ceC" type="color" value="${p.color || '#2557b8'}"></div></div>
+    <div class="row2"><div class="f"><label>Grade</label><select id="ceG">${COMP.grades.map(g => `<option value="${g.id}" ${+p.grade === g.id ? 'selected' : ''}>${g.id} · ${esc(g.name)}</option>`).join('')}</select></div>
+      <div class="f"><label>Minister (credentialed clergy)</label><select id="ceK"><option value="1" ${r.clergy ? 'selected' : ''}>Yes</option><option value="0" ${r.clergy ? '' : 'selected'}>No</option></select></div></div>
+    <div class="row2"><div class="f"><label>Hours a week</label><input id="ceH" type="number" value="${p.hours}"></div><div class="f"><label>Years at ${esc(SETUP.shortName)}</label><input id="ceY" type="number" value="${p.years}"></div></div>
+    <div class="section"><h3>${Y} package <span class="muted small">(${Y - 1} in grey)</span></h3>
+      ${CMP.ITEMS.map(it => `<div class="fund" style="padding:6px 0"><div class="nm" style="font-weight:500">${it.icon} ${esc(it.label)}<small>${Y - 1}: ${fmt(+(p.now[it.key] || 0))}</small></div><input type="number" step="50" data-ce="${it.key}" value="${+(p.next[it.key] || 0)}" style="width:120px;text-align:right"></div>`).join('')}
+      <p class="muted small" style="margin-top:6px">Retirement as the Michigan Ministry Network suggests: a fixed amount and/or 50¢ per $1 the person puts in, up to 2.5% of salary + housing.</p></div>`,
+    actions: `<button class="btn" data-close>Cancel</button><button class="btn primary" id="ceGo">Save</button>`,
+    init() { $('#ceGo').onclick = () => { p.name = $('#ceN').value.replace(/[<>"]/g, '').trim() || p.name; p.color = $('#ceC').value; p.grade = +$('#ceG').value; p.clergy = $('#ceK').value === '1';
+      p.hours = Math.max(1, +$('#ceH').value || 40); p.years = Math.max(0, +$('#ceY').value || 0);
+      document.querySelectorAll('[data-ce]').forEach(x => { const v = Math.max(0, Math.round((+x.value || 0) * 100) / 100); if (v || p.next[x.dataset.ce] != null) p.next[x.dataset.ce] = v; });
+      closePanel(); render(); toast(`${p.name}'s ${Y} pay saved`); }; } };
+};
+P.cmpall = () => {
+  const Y = COMP.year;
+  return { kicker: 'Staff pay & raises', body: `<h2>Raise everyone</h2><p class="lead">Set every ${Y} pay to ${Y - 1} pay plus a percentage. You can still change anyone afterwards.</p>
+    <div class="f"><label>Raise (%)</label><input id="caP" type="number" step="0.5" value="3"></div>
+    <label style="display:flex;gap:8px;align-items:center;margin:6px 0"><input type="checkbox" id="caR" checked> Then bring anyone below the bottom of their range up to it</label>
+    <label style="display:flex;gap:8px;align-items:center"><input type="checkbox" id="caH" checked> Keep each minister's housing allowance as designated</label>`,
+    actions: `<button class="btn" data-close>Cancel</button><button class="btn primary" id="caGo">Apply</button>`,
+    init() { $('#caGo').onclick = () => { const k = 1 + (+$('#caP').value || 0) / 100, keepH = $('#caH').checked, up = $('#caR').checked;
+      COMP.people.forEach(p => { const nowPay = +(p.now.salary || 0) + +(p.now.housing || 0); let pay = Math.round(nowPay * k / 100) * 100;
+        const t = cmpTarget(p); if (up && t && pay * 100 < t.min) pay = Math.ceil(t.min / 10000) * 100;
+        if (!keepH) p.next.housing = Math.round(+(p.now.housing || 0) * k); cmpSetPay(p, pay); });
+      closePanel(); render(); toast(`Everyone set to ${Y - 1} pay + ${$('#caP').value}%`); }; } };
+};
+P.cmpstmt = i => { const r = cmpRow(COMP.people[i]);
+  return { kicker: 'Personal statement', body: payStatementHTML(r) + `<p class="muted small" style="margin-top:10px">Only ${esc(firstName(r.p.name))} should get this one.</p>`,
+    actions: `<button class="btn" data-close>Close</button><button class="btn primary" data-cmpprint="${i}">🖨 Print</button>` }; };
 /* ---------- Bringing in data: QuickBooks (Online exports, Desktop IIF), Excel, CSV, PDF and bank downloads ----------
    Read the file → say what's in it → match their accounts and classes to ours → preview → import. Nothing is posted
    until the preview is checked; every import can be undone in one step (its entries are reversed). engine/importer.js */
@@ -4681,7 +4787,7 @@ document.addEventListener('drop', e => { const d = e.target.closest('#impDrop');
 $('#side').addEventListener('click', e => { if (e.target.closest('a')) setNav(false); });
 
 document.addEventListener('click', e => {
-  const t = e.target.closest('[data-open],[data-go],[data-close],[data-payout],[data-expf],[data-bank],[data-fix],[data-print],[data-toast],[data-alloc],[data-review],[data-remind],[data-snapi],[data-snapshot],[data-snapsend],[data-snapback],[data-attach],[data-card],[data-budget],[data-btab],[data-reverse],[data-billok],[data-billpay],[data-billtab],[data-w9],[data-inboxbill],[data-ten99csv],[data-newvendor],[data-payback],[data-paybackall],[data-reimbsend],[data-cosign],[data-voidck],[data-printsel],[data-ppay],[data-recon],[data-reconreview],[data-reconrpt],[data-settab],[data-setfund],[data-setperson],[data-setcat],[data-setexport],[data-req],[data-asksend],[data-recrun],[data-recedit],[data-recapp],[data-recpause],[data-salary],[data-regrec],[data-plstart],[data-pladd],[data-plpropose],[data-plprint],[data-wfadd],[data-wfrm],[data-bprint],[data-bsent],[data-notifynow],[data-ntab],[data-wkpreview],[data-setnotify],[data-viewfile],[data-rmfile],[data-vfiles],[data-reconfiles],[data-entryfiles],[data-billfiles],[data-cloudexport],[data-dtab],[data-nc],[data-ncstep],[data-ncack],[data-open-ncsale],[data-stmt],[data-stmtall],[data-rental],[data-rpay],[data-ragree],[data-rdep],[data-rend],[data-rrcpt],[data-kbp],[data-kbpay],[data-kbrubric],[data-kbpause],[data-kbprint],[data-reveal],[data-pushsend],[data-totpay],[data-mksub],[data-subedit],[data-cntok],[data-assetout],[data-glexport],[data-subrpt],[data-rpt],[data-rptprint],[data-rptsend],[data-seasonclose],[data-impsample],[data-impgo],[data-impreset],[data-impundo],[data-kbgive],[data-kbchange],[data-pledge],[data-plupdates],[data-plprint],[data-plsend],[data-plcancel]');
+  const t = e.target.closest('[data-open],[data-go],[data-close],[data-payout],[data-expf],[data-bank],[data-fix],[data-print],[data-toast],[data-alloc],[data-review],[data-remind],[data-snapi],[data-snapshot],[data-snapsend],[data-snapback],[data-attach],[data-card],[data-budget],[data-btab],[data-reverse],[data-billok],[data-billpay],[data-billtab],[data-w9],[data-inboxbill],[data-ten99csv],[data-newvendor],[data-payback],[data-paybackall],[data-reimbsend],[data-cosign],[data-voidck],[data-printsel],[data-ppay],[data-recon],[data-reconreview],[data-reconrpt],[data-settab],[data-setfund],[data-setperson],[data-setcat],[data-setexport],[data-req],[data-asksend],[data-recrun],[data-recedit],[data-recapp],[data-recpause],[data-salary],[data-regrec],[data-plstart],[data-pladd],[data-plpropose],[data-plprint],[data-wfadd],[data-wfrm],[data-bprint],[data-bsent],[data-notifynow],[data-ntab],[data-wkpreview],[data-setnotify],[data-viewfile],[data-rmfile],[data-vfiles],[data-reconfiles],[data-entryfiles],[data-billfiles],[data-cloudexport],[data-dtab],[data-nc],[data-ncstep],[data-ncack],[data-open-ncsale],[data-stmt],[data-stmtall],[data-rental],[data-rpay],[data-ragree],[data-rdep],[data-rend],[data-rrcpt],[data-kbp],[data-kbpay],[data-kbrubric],[data-kbpause],[data-kbprint],[data-reveal],[data-pushsend],[data-totpay],[data-mksub],[data-subedit],[data-cntok],[data-assetout],[data-glexport],[data-subrpt],[data-rpt],[data-rptprint],[data-rptsend],[data-seasonclose],[data-cmpedit],[data-cmpstmt],[data-cmpprint],[data-cmpprintall],[data-cmpplan],[data-impsample],[data-impgo],[data-impreset],[data-impundo],[data-kbgive],[data-kbchange],[data-pledge],[data-plupdates],[data-plprint],[data-plsend],[data-plcancel]');
   if (!t) { if (!e.target.closest('.newwrap, #newMenu')) $('#newMenu').classList.remove('show'); return; }
   if (t.dataset.open) openPanel(t.dataset.open, t.dataset.cardi !== undefined ? +t.dataset.cardi : undefined);
   else if (t.dataset.go) { closePanel(); location.hash = t.dataset.go; }
@@ -4748,6 +4854,12 @@ document.addEventListener('click', e => {
   else if (t.hasAttribute('data-subrpt')) sendToPrinter(subsReportHTML());
   else if (t.dataset.rpt) { reportOf = t.dataset.rpt; closePanel(); if (location.hash === '#report') render(); else location.hash = 'report'; window.scrollTo(0, 0); }
   else if (t.hasAttribute('data-rptprint')) sendToPrinter(reportHTML(reportOf, reportRange));
+  else if (t.hasAttribute('data-cmpedit')) openPanel('cmpedit', +t.dataset.cmpedit);
+  else if (t.hasAttribute('data-cmpstmt')) openPanel('cmpstmt', +t.dataset.cmpstmt);
+  else if (t.hasAttribute('data-cmpprint')) sendToPrinter(payStatementHTML(cmpRow(COMP.people[+t.dataset.cmpprint])));
+  else if (t.hasAttribute('data-cmpprintall')) sendToPrinter(COMP.people.map(p => `<div class="rpt-page">${payStatementHTML(cmpRow(p))}</div>`).join(''));
+  else if (t.hasAttribute('data-cmpplan')) { const s = cmpSummary(), line = PLAN && PLAN.lines.find(l => /^staff/i.test(l.name) && !l.parent);
+    if (!line) toast(`Start the ${COMP.year} budget plan first (Budgets → Plan ${COMP.year})`); else { line.amount = Math.round(s.next.cost / 100); planEdited(); render(); toast(`${line.name} in the ${COMP.year} plan set to ${fc(s.next.cost)}`); } }
   else if (t.hasAttribute('data-impsample')) { const f = t.dataset.impsample; fetch('samples/import/' + f).then(r => r.ok ? r.arrayBuffer() : fetch('samples/import/' + f + '.b64.txt').then(r2 => { if (!r2.ok) throw new Error('not found'); return r2.text(); }).then(t => Uint8Array.from(atob(t.trim()), c => c.charCodeAt(0)).buffer))   /* where .xlsx can't be served, the sample is stored as base64 text */.then(b => impOpen(f, b)).catch(() => toast('Couldn\'t open the sample file')); }
   else if (t.hasAttribute('data-impgo')) impGo();
   else if (t.hasAttribute('data-impreset')) { IMP = null; render(); }
@@ -4890,6 +5002,11 @@ document.addEventListener('change', e => { const ed = e.target.closest('.spl'); 
   if (e.target.id === 'showNames') { showNames = e.target.checked; render(); }
   if (e.target.id === 'pcampPick') { pledgeCamp = e.target.value; render(); }
   if (e.target.id === 'impFile' && e.target.files[0]) { const f = e.target.files[0]; f.arrayBuffer().then(b => impOpen(f.name, b)); }
+  if (COMP && e.target.closest('#view')) { const d = e.target.dataset, v = e.target.value;
+    if (d.cmppay != null) { cmpSetPay(COMP.people[+d.cmppay], Math.max(0, +v || 0)); render(); }
+    else if (d.cmpgrade != null) { COMP.grades[+d.cmpgrade].midpoint = Math.max(0, Math.round(+v || 0)); render(); }
+    else if (e.target.id === 'cmpYears') { COMP.yearsToMax = Math.max(1, +v || 15); render(); }
+    else if (e.target.id === 'cmpMinWage') { COMP.minWage = Math.max(0, +v || 0); render(); } }
   if (IMP && e.target.closest('#view')) { const d = e.target.dataset, v = e.target.value;
     if (e.target.id === 'impKind') { IMP.kind = v; impRead(); impGuess(); render(); }
     else if (e.target.id === 'impHead') { IMP.d = { ...IMP.d, header: +v, cols: IMPX.headerOf(IMP.rows[+v]) }; impRead(); impGuess(); render(); }
@@ -5296,7 +5413,7 @@ P.lockmonth = () => ({
 // Everything that isn't the ledger or the setup: what the cloud version saves as everyday work
 function workspaceState() {
   return { payouts: PAYOUTS, cash: CASH, registrations: REG, requests: REQUESTS, subscriptions: SUBS, inbox: INBOX, bankLines: BANKLINES, staff: STAFF, checks: CHECKS, vendors: VENDORS, bills: BILLS,
-    commitments: COMMITS, pledgeCampaigns: PCAMPS, pledges: PLEDGES, schedules: SCHEDULES, nonCash: NONCASH, donors: DONORS, rentals: RENTALS, partners: PARTNERS, pushes: PUSHES, assets: ASSETS, statementThrough: SAMPLE.statementThrough, payrollSchedule: SAMPLE.payrollSchedule,
+    commitments: COMMITS, pledgeCampaigns: PCAMPS, pledges: PLEDGES, compPlan: COMP, schedules: SCHEDULES, nonCash: NONCASH, donors: DONORS, rentals: RENTALS, partners: PARTNERS, pushes: PUSHES, assets: ASSETS, statementThrough: SAMPLE.statementThrough, payrollSchedule: SAMPLE.payrollSchedule,
     app: { recons: RECONS, cleared: Object.fromEntries([...CLEARED].map(([k, v]) => [k, [...v]])), packets: PACKETS, boardNotes: BOARD_NOTES, plan: PLAN,
       titheChecks: TOTQ, boardDecide: BOARD_DECIDE, kbSwitch: SWITCH, imports: IMPORTS.slice(0, 100), qbTypes: QB_TYPES_SEEN, outbox: OUTBOX.slice(-200), sent: [...SENT], lastWeekly, setupLog: SETUP_LOG, files: FILES.toJSON(), sampleFiles: [...SAMPLE_FILES], xSeq,
       bankStatement: Object.fromEntries(BANKS.filter(b => b.bank !== null).map(b => [b.code, b.bank])) } };

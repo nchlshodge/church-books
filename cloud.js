@@ -24,7 +24,7 @@
 
   const Cloud = window.Cloud = { replaying: false };
   // Kept apart from everyday work: who gave what (donors + non-cash gifts) and salaries (staff)
-  const PRIVATE_OF = { donors: 'donors', nonCash: 'donors', pledges: 'donors', staff: 'payroll' };   // who pledged what is private too
+  const PRIVATE_OF = { donors: 'donors', nonCash: 'donors', pledges: 'donors', staff: 'payroll', compPlan: 'payroll' };   // who pledged what is private too
   let rawPriv = {}, rawWs = {}, rawExp = {}, orgId = null, me = null, hooks = null, lastSetup = '', lastWs = {}, lastExp = {}, chain = Promise.resolve(), pending = 0, problem = null, timer = null;
 
   /* ---------- the sign-in and loading screens ---------- */
@@ -99,7 +99,7 @@
     // Private information, only if this person may see it (otherwise those pages are simply empty for them)
     for (const kind of ['donors', 'payroll']) { if (!canPrivate(kind)) continue;
       try { const d = await org.collection('private').doc(kind).get(); if (!d.exists) continue; rawPriv[kind] = d.data().json; const v = JSON.parse(rawPriv[kind]);
-        if (kind === 'donors') { ws.donors = v.donors || []; ws.nonCash = v.nonCash || []; ws.pledges = v.pledges || []; } else ws.staff = v.staff || []; } catch (e) { /* not allowed */ } }
+        if (kind === 'donors') { ws.donors = v.donors || []; ws.nonCash = v.nonCash || []; ws.pledges = v.pledges || []; } else { ws.staff = v.staff || []; ws.compPlan = v.compPlan || null; } } catch (e) { /* not allowed */ } }
     let alerts = [];
     if (['owner', 'admin'].includes(me.role)) { try { (await org.collection('alerts').orderBy('at', 'desc').limit(20).get()).forEach(d => alerts.push({ id: d.id, ...d.data() })); } catch (e) { /* none */ } }
     const expenses = []; expSnap.forEach(d => { const x = JSON.parse(d.data().json); rawExp[x.id] = d.data().json; expenses.push(x); });
@@ -200,10 +200,10 @@
     if (JSON.stringify(strip(hooks.setup())) !== lastSetup) chain = track(chain.then(flushSetup), 'settings');
     const org = fs.doc(`orgs/${orgId}`), by = me.name || me.email, at = new Date().toISOString(), jobs = [];
     const wsAll = hooks.workspace();
-    const priv = { donors: JSON.stringify({ donors: wsAll.donors || [], nonCash: wsAll.nonCash || [], pledges: wsAll.pledges || [] }), payroll: JSON.stringify({ staff: wsAll.staff || [] }) };
+    const priv = { donors: JSON.stringify({ donors: wsAll.donors || [], nonCash: wsAll.nonCash || [], pledges: wsAll.pledges || [] }), payroll: JSON.stringify({ staff: wsAll.staff || [], compPlan: wsAll.compPlan || null }) };
     Object.entries(priv).forEach(([kind, j]) => { if (!canPrivate(kind) || j === rawPriv[kind]) return;
       if (kind === 'donors' && rawPriv.donors == null && !(wsAll.donors || []).length && !(wsAll.nonCash || []).length && !(wsAll.pledges || []).length) return;
-      if (kind === 'payroll' && rawPriv.payroll == null && !(wsAll.staff || []).length) return;
+      if (kind === 'payroll' && rawPriv.payroll == null && !(wsAll.staff || []).length && !wsAll.compPlan) return;
       jobs.push(org.collection('private').doc(kind).set({ json: j, updatedAt: at, updatedBy: by }).then(() => { rawPriv[kind] = j; })); });
     Object.entries(wsAll).forEach(([k, v]) => {
       if (PRIVATE_OF[k]) return;   // saved above, apart from everything else
