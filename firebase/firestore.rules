@@ -3,7 +3,7 @@ service cloud.firestore {
   match /databases/{database}/documents {
 
     // ===== BEGIN CHURCH BOOKS =====
-    // Church Books (Accounting/). Every church's records live under orgs/{org}; nothing is readable outside
+    // Fundwell (Accounting/). Every church's records live under orgs/{org}; nothing is readable outside
     // your own church. The ledger (entries, sources, audit, snapshots, ledger state, setup) is written only by
     // the books* Cloud Functions. Helpers are named books… and live inside this block, so it can be pasted
     // into another app's rules (the RCC Hub's) without clashing. Source: Accounting/firebase/firestore.rules.

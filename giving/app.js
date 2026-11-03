@@ -1,4 +1,4 @@
-// Church Books — the congregation's giving page (mockup on sample data; no real payments).
+// Fundwell — the congregation's giving page (mockup on sample data; no real payments).
 // Loaded by giving/index.html after the church's setup.js and sample.js and the engine modules it uses.
 // How it would really work, with Stripe Connect: docs/giving-site.md.
 // Everything put into the page goes through esc() first.

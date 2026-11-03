@@ -1,4 +1,4 @@
-# Church Books — going live on the RCC Hub's Firebase project (`bedsidercc`)
+# Fundwell — going live on the RCC Hub's Firebase project (`bedsidercc`)
 
 **Status:** LIVE since 2026-10-19 (Nick said go). The rules (v22) and the 9 books functions are deployed to `bedsidercc`. `firebase.json` now points at v22 plus the books codebase; the old one is `firebase.before-books.json`. No church has been started yet.
 

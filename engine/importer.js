@@ -1,4 +1,4 @@
-// Church Books engine — bringing in data from other systems: QuickBooks (Online exports to Excel/CSV, Desktop IIF),
+// Fundwell engine — bringing in data from other systems: QuickBooks (Online exports to Excel/CSV, Desktop IIF),
 // any spreadsheet or CSV, and PDFs (after the app pulls the text and positions out of them). Everything here is
 // pure: files become rows, rows become a chart of accounts, opening balances, transactions or bank lines, and those
 // become draft entries for the ledger to check. Amounts are whole cents; dates are 'YYYY-MM-DD'.

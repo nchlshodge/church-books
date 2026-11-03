@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Church Books — Mockup</title>
+<title>Fundwell — Mockup</title>
 <meta name="theme-color" content="#2557b8">
 <link rel="stylesheet" href="../rcc-ui.css">
 <link rel="stylesheet" href="shared/rcc-ui.css">   <!-- a copy, for when this folder is used on its own (outside the RCC App Hub) -->
@@ -460,7 +460,8 @@ const kids = p => PROJECTS.filter(x => x.parent === p.name);
 const projLabel = p => (p.parent ? p.parent + ' › ' : '') + p.name;
 const projOptions = sel => FUNDS.map(f => { const top = PROJECTS.filter(p => p.fund === f.id && !p.parent); return top.length ? `<optgroup label="${esc(f.name)}">${top.map(p => [p, ...kids(p)]).flat().map(p => `<option value="${esc(p.name)}" ${p.name === sel ? 'selected' : ''}>${p.parent ? '\u00a0\u00a0\u00a0↳ ' : ''}${esc(p.name)}</option>`).join('')}</optgroup>` : ''; }).join('');
 const TODAY = SAMPLE.today, YEAR = TODAY.slice(0, 4);
-const APP = `${SETUP.shortName} ${SETUP.appName || 'Books'}`;
+const PRODUCT = 'Fundwell';   // the product's name — a placeholder until the name is settled
+const APP = `${SETUP.shortName} ${SETUP.appName || PRODUCT}`;
 const INTEG = SETUP.integrations || {};
 const REG_SRC = (SETUP.integrations || {}).registrations || 'Event sign-ups';
 const GIV_SRC = INTEG.giving || 'Online giving', FEE_SRC = INTEG.processor || 'Processor', PAY_SRC = INTEG.payroll || 'the payroll service';
@@ -693,7 +694,7 @@ const NAV = [
 ];
 function renderSide(active) {
   $('#side').innerHTML =
-    `<a class="rcc-brand" href="#home">${SETUP.logo ? `<img src="${esc(SETUP.logo)}" alt="" onerror="this.onerror=null;this.src='shared/'+this.src.split('/').pop()">` : ''}<b>${esc(SETUP.shortName)}</b><span>${esc(SETUP.appName || 'Books')}</span></a>` +
+    `<a class="rcc-brand" href="#home">${SETUP.logo ? `<img src="${esc(SETUP.logo)}" alt="" onerror="this.onerror=null;this.src='shared/'+this.src.split('/').pop()">` : ''}<b>${esc(SETUP.shortName)}</b><span>${esc(SETUP.appName || PRODUCT)}</span></a>` +
     NAV.map(g => (g.h ? `<h6>${g.h}</h6>` : '') + g.items.filter(n => !n.show || n.show()).map(n => {
       const b = n.badge ? n.badge() : 0;
       return `<a href="#${n.k}" class="${n.k === active ? 'active' : ''}"><svg viewBox="0 0 24 24">${I[n.i]}</svg>${n.l}${b ? `<span class="badge">${b}</span>` : ''}</a>`;
@@ -3073,14 +3074,14 @@ function runNotifications(nowIso, quiet) {
 }
 function msgCard(m) {
   return `<details class="msg"><summary><span class="pill ${m.via === 'text' ? 'gold' : 'blue'}">${m.via === 'text' ? 'Text' : 'Email'}</span><span class="nm"><b>${esc(m.subject)}</b><small>${esc(NOTIFY_LABEL[m.rule] || m.rule)} · to ${m.toName ? esc(m.toName) : andList(m.to.map(id => esc(PEOPLE[id].name)))} · ${esc(m.at)}</small></span><span class="pill ${m.status === 'Sent' ? 'green' : 'gray'}">${m.status}</span></summary>
-    <div class="mail-preview"><div class="mp-head">From: ${esc(SETUP.shortName)} ${esc(SETUP.appName || 'Books')} · To: ${m.toName ? `${esc(m.toName)} &lt;${esc(m.toEmail)}&gt;` : m.to.map(id => `${esc(PEOPLE[id].name)} &lt;${esc(contactOf(id, m.via))}&gt;`).join(', ')}<br>Subject: <b>${esc(m.subject)}</b></div>${m.body}<p class="muted small">Open ${esc(SETUP.shortName)} ${esc(SETUP.appName || 'Books')} to see more · Change what you get in Settings → Notifications</p></div></details>`;
+    <div class="mail-preview"><div class="mp-head">From: ${esc(SETUP.shortName)} ${esc(SETUP.appName || PRODUCT)} · To: ${m.toName ? `${esc(m.toName)} &lt;${esc(m.toEmail)}&gt;` : m.to.map(id => `${esc(PEOPLE[id].name)} &lt;${esc(contactOf(id, m.via))}&gt;`).join(', ')}<br>Subject: <b>${esc(m.subject)}</b></div>${m.body}<p class="muted small">Open ${esc(SETUP.shortName)} ${esc(SETUP.appName || PRODUCT)} to see more · Change what you get in Settings → Notifications</p></div></details>`;
 }
 V.notify = () => {
   const sent = OUTBOX.slice().reverse(), w = NOTIFY.weekly && NOTIFY.weekly.on ? NB.weeklyDue(NOTIFY.weekly, lastWeekly, new Date().toISOString().slice(0, 10) === TODAY ? new Date().toISOString() : `${TODAY}T12:00:00`) : null;
   const soon = BILLS.filter(b => b.status !== 'Paid' && b.status !== 'To approve').map(b => ({ b, d: daysTo(b.payOn || b.due) })).filter(x => x.d >= 0 && x.d <= 14);
   const alertsCard = window.CLOUD && CLOUD.alerts && CLOUD.alerts.length ? `<div class="card mb"><h2>⚑ For the owner</h2><div class="sub">Big payments, reopened months and role changes, as the server saw them</div>
     ${CLOUD.alerts.map(a => `<div class="fund"><div class="nm">${a.kind === 'payment' ? `${fc(a.amount)} left the bank` : a.kind === 'unlock' ? `Closed books reopened (${esc(a.from || '')} → ${esc(a.to || 'open')})` : a.kind === 'role' ? `${esc(a.email)} given the ${esc(a.role)} role${(a.access || []).length ? ` · sees ${esc(a.access.join(', '))}` : ''}` : esc(a.kind)}<small>${esc(a.memo || a.reason || '')} · ${esc(a.by || '')} · ${new Date(a.at).toLocaleString()}</small></div></div>`).join('')}</div>` : '';
-  return alertsCard + `<div class="vhead"><div><h1>Notifications</h1><p>What ${esc(SETUP.shortName)} ${esc(SETUP.appName || 'Books')} tells people, and when. Each alert goes out once. In the hosted version these are emailed or texted for real.</p></div>
+  return alertsCard + `<div class="vhead"><div><h1>Notifications</h1><p>What ${esc(SETUP.shortName)} ${esc(SETUP.appName || PRODUCT)} tells people, and when. Each alert goes out once. In the hosted version these are emailed or texted for real.</p></div>
       <div class="acts"><button class="btn" data-go="settings" onclick="setTab='notify'">Change the rules</button><button class="btn primary" data-notifynow>Check now</button></div></div>
     <div class="seg"><button class="${notifyTab === 'sent' ? 'active' : ''}" data-ntab="sent">Sent (${sent.length})</button><button class="${notifyTab === 'soon' ? 'active' : ''}" data-ntab="soon">Coming up</button></div>
     ${notifyTab === 'sent' ? `<div class="card">${sent.map(msgCard).join('') || '<div class="empty"><b>Nothing sent yet</b></div>'}</div>`
@@ -4341,7 +4342,7 @@ function impAccountsCard() {
   const base = opts(ourAccts()), n = names.filter(x => (IMP.acc[x.name] || {}).how === 'new').length;
   IMP.names = names.map(x => x.name);
   return `<div class="card mb"><h2>2 · Match their accounts to yours</h2><div class="sub">${names.length - n} matched · ${n} new account${n === 1 ? '' : 's'} will be added${IMP.kind === 'trialBalance' ? ' · last year\'s income and spending go into the fund balance' : ''}</div>
-    <div class="tablewrap"><table class="t"><thead><tr><th>In the file</th><th>In ${esc(SETUP.shortName)} Books</th></tr></thead><tbody>
+    <div class="tablewrap"><table class="t"><thead><tr><th>In the file</th><th>In ${esc(APP)}</th></tr></thead><tbody>
     ${names.map((x, i) => { const a = IMP.acc[x.name] || {}; return `<tr><td><b>${esc(x.name)}</b>${x.type ? `<div class="muted small">${esc(x.type)}</div>` : ''}</td>
       <td><select data-impacc="${i}" style="max-width:340px">${a.how === 'new' ? `<option value="new" selected>➕ New: ${esc(a.code)} ${esc(a.newName)} (${({ asset: 'asset', liability: 'liability', net_assets: 'fund balance', income: 'income', expense: 'spending' })[a.type]})</option>` : '<option value="new">➕ Add it as a new account</option>'}${base.replace(`value="${a.code}">`, a.how !== 'new' ? `value="${a.code}" selected>` : `value="${a.code}">`)}</select>
       ${a.how && a.how !== 'new' ? `<span class="muted small"> ${({ name: 'same name', equity: 'fund balance', number: 'same number', similar: 'similar name', picked: 'you picked' })[a.how] || ''}</span>` : ''}</td></tr>`; }).join('')}</tbody></table></div></div>`;

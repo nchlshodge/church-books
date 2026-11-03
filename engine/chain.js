@@ -1,4 +1,4 @@
-// Church Books engine — tamper evidence. Every saved entry carries
+// Fundwell engine — tamper evidence. Every saved entry carries
 //   hash = sha256(previous entry's hash + the entry itself)
 // so anyone holding an export can re-check the whole ledger: if a past entry is edited by hand,
 // its hash (and every one after it) stops matching. Pure JS so the browser and server agree.

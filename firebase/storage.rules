@@ -3,7 +3,7 @@ service firebase.storage {
   match /b/{bucket}/o {
 
     // ===== BEGIN CHURCH BOOKS =====
-    // Church Books files: orgs/{org}/files/{fileId}/{name}. Never replaced or deleted — "removing" a file
+    // Fundwell files: orgs/{org}/files/{fileId}/{name}. Never replaced or deleted — "removing" a file
     // only hides it in the app and is logged. Source: Accounting/firebase/storage.rules.
     match /orgs/{org}/files/{fileId}/{name} {
       function booksMemberDoc() { return /databases/(default)/documents/orgs/$(org)/members/$(request.auth.uid); }

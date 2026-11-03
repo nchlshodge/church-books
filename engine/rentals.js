@@ -1,4 +1,4 @@
-// Church Books engine — renting out the building. Pure date and money math; amounts are whole cents.
+// Fundwell engine — renting out the building. Pure date and money math; amounts are whole cents.
 //
 // The IRS line, built in: paying to use the building is rent, not a gift — even when the church asks for a
 // "donation". Only what someone pays above the fair value of their use is a contribution, and when a payment

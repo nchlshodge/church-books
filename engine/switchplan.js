@@ -1,4 +1,4 @@
-// Church Books engine — planning a switch to Kingdom Builders without breaking missions commitments.
+// Fundwell engine — planning a switch to Kingdom Builders without breaking missions commitments.
 // Projects the Missions fund month by month: today's model until the switch (the Missions offering in, today's
 // missions spending out), then Missions' share of Kingdom Builders in, the same commitments out.
 // Pure math; amounts are whole cents; months are 'YYYY-MM'.

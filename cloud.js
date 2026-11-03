@@ -1,4 +1,4 @@
-// Church Books — the cloud connection (index.html?cloud). Signs the person in, loads their church's
+// Fundwell — the cloud connection (index.html?cloud). Signs the person in, loads their church's
 // books from Firestore, then starts the app. While the app runs it:
 //   • sends every ledger change (post, reverse, lock) to the Cloud Functions, one at a time, in order —
 //     the server re-checks it with the same engine and is the record; the browser never writes the ledger
@@ -31,7 +31,7 @@
   function gate(html) {
     let g = document.getElementById('cloudGate');
     if (!g) { g = document.createElement('div'); g.id = 'cloudGate'; document.body.appendChild(g); }
-    g.innerHTML = `<div class="cg-card"><div class="cg-brand">Church Books</div>${html}</div>`;   // html is built with esc()
+    g.innerHTML = `<div class="cg-card"><div class="cg-brand">Fundwell</div>${html}</div>`;   // html is built with esc()
     return g;
   }
   const style = document.createElement('style');
@@ -118,7 +118,7 @@
   function emptyBooks(setup) {
     return new Promise(resolve => {
       const owner = me.role === 'owner';
-      const g = gate(`<p><b>${esc(setup.name)}</b>'s books are empty.</p>${owner ? `<p>Bring in an export from Church Books (Settings → History &amp; export → “Export everything”), or start with just the setup.</p>
+      const g = gate(`<p><b>${esc(setup.name)}</b>'s books are empty.</p>${owner ? `<p>Bring in an export from Fundwell (Settings → History &amp; export → “Export everything”), or start with just the setup.</p>
         <input type="file" id="cgFile" accept=".json,application/json"><button class="pri" id="cgImport">Bring in the file</button><button id="cgEmpty">Start with empty books</button><div class="cg-err" id="cgErr"></div>`
         : '<p>The owner needs to bring the books in first.</p><button id="cgEmpty">Look around anyway</button>'}`);
       g.querySelector('#cgEmpty').onclick = () => resolve(true);
@@ -128,7 +128,7 @@
         if (!f) { errBox.textContent = 'Pick the export file first.'; return; }
         imp.disabled = true; imp.textContent = 'Checking every entry…';
         try {
-          const data = JSON.parse(await f.text()); if (data.format !== 'church-books-export') throw new Error('That file is not a Church Books export.');
+          const data = JSON.parse(await f.text()); if (data.format !== 'church-books-export') throw new Error('That file is not a Fundwell export.');
           const r = await Cloud.importBooks(data); imp.textContent = `Brought in ${r.entries} entries`; setTimeout(() => location.reload(), 600); resolve(false);
         } catch (e) { errBox.textContent = e.message; imp.disabled = false; imp.textContent = 'Bring in the file'; }
       };
@@ -139,14 +139,14 @@
   Cloud.canPrivate = canPrivate;
   // Books administrators only: start a church from an "Export everything" file (its setup, and its books if it has any).
   function startChurch(user) {
-    const g = gate(`<p>Start a church's books. Use an export from Church Books (Settings → History &amp; export → “Export everything”).</p>
+    const g = gate(`<p>Start a church's books. Use an export from Fundwell (Settings → History &amp; export → “Export everything”).</p>
       <input type="file" id="scFile" accept=".json,application/json"><input id="scId" placeholder="Church id, e.g. rcc"><select id="scMe" style="width:100%;padding:11px;border:1px solid #ddd5c6;border-radius:10px;margin-bottom:10px;font:inherit"><option value="">Who you are — pick the file first</option></select>
       <label style="display:flex;gap:8px;font-size:13.5px;color:#6b6559;margin-bottom:12px"><input type="checkbox" id="scBooks" checked style="width:auto;margin:0"> Bring in the entries and everyday work too (uncheck for just the setup)</label>
       <button class="pri" id="scGo">Start</button><button id="cgOut">Sign out</button><div class="cg-err" id="scErr"></div>`);
     let data = null; const err = g.querySelector('#scErr');
     g.querySelector('#cgOut').onclick = () => auth.signOut();
     g.querySelector('#scFile').onchange = async e => {
-      try { data = JSON.parse(await e.target.files[0].text()); if (data.format !== 'church-books-export') throw new Error('That file is not a Church Books export.'); err.textContent = '';
+      try { data = JSON.parse(await e.target.files[0].text()); if (data.format !== 'church-books-export') throw new Error('That file is not a Fundwell export.'); err.textContent = '';
         const people = Object.entries(data.setup.people || {}).filter(([, p]) => !p.group);
         g.querySelector('#scMe').innerHTML = people.map(([id, p]) => `<option value="${esc(id)}" ${String(p.email || '').toLowerCase() === String(user.email).toLowerCase() ? 'selected' : ''}>${esc(p.name)}</option>`).join('');
         if (!g.querySelector('#scId').value) g.querySelector('#scId').value = String(data.setup.id || '').replace(/[^a-z0-9-]/g, '');
@@ -176,7 +176,7 @@
   }
   function fail(err, what) {
     problem = `Not saved${what ? ` (${what})` : ''}: ${(err && err.message) || err}`; chip();
-    console.error('Church Books cloud:', what, err);
+    console.error('Fundwell cloud:', what, err);
   }
   function track(p, what) { pending++; chip(); return p.catch(e => fail(e, what)).finally(() => { pending--; chip(); }); }
   // Ledger changes go to the server one at a time, in order, after any setup change they depend on.

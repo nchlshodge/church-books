@@ -1,4 +1,4 @@
-// Church Books engine — Kingdom Builders partners: who the above-and-beyond giving goes out to.
+// Fundwell engine — Kingdom Builders partners: who the above-and-beyond giving goes out to.
 // Partners sit in three categories — Local, Global and Future (next-generation leaders) — each with a
 // target share of the giving. New partners are scored on an 8-question rubric (0–3 each, 0–24 total).
 // Pure functions; amounts are whole cents.

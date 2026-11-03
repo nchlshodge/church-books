@@ -1,4 +1,4 @@
-// Church Books engine — what the IRS expects around gifts, in plain rules. Pure functions, no dates of
+// Fundwell engine — what the IRS expects around gifts, in plain rules. Pure functions, no dates of
 // "today" hidden inside: everything is passed in. Amounts are whole cents. This is guidance built into the
 // workflow, not tax advice — the church's accountant has the last word.
 //

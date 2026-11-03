@@ -1,4 +1,4 @@
-// Church Books engine — yearly commitment campaigns (e.g. Kingdom Builders: Plan / Vision / Dream).
+// Fundwell engine — yearly commitment campaigns (e.g. Kingdom Builders: Plan / Vision / Dream).
 // Commitments live in the giving system (who committed what is private); this adds them up
 // against what's actually been given, which comes from the books. All amounts are whole cents.
 //

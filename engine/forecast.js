@@ -1,4 +1,4 @@
-// Church Books engine — cash-flow forecast. Given what each fund has now and a list of money
+// Fundwell engine — cash-flow forecast. Given what each fund has now and a list of money
 // expected in and out (by period), it works out each fund's cash at the end of every period and
 // warns when a fund runs out or drops below its cushion. Whole cents; signed amounts (in > 0, out < 0).
 //

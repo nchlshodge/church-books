@@ -1,4 +1,4 @@
-// Church Books engine — deciding which alerts should go out now. Each alert has a key, and a key
+// Fundwell engine — deciding which alerts should go out now. Each alert has a key, and a key
 // that's already in `sent` never goes out again (so a budget at 80% isn't announced every day).
 // Pure: it only returns what to send; sending is someone else's job.
 (function (root, factory) {

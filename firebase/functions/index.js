@@ -1,4 +1,4 @@
-// Church Books — the only code that writes to a church's ledger. The browser reads the books but
+// Fundwell — the only code that writes to a church's ledger. The browser reads the books but
 // never writes them: every entry, reversal, lock and setup change comes through here, is checked
 // with the same engine the app uses (engine/*.js, copied in by `npm run sync-engine`), and is
 // saved in one transaction with a hash chain (engine/chain.js) so a hand-edited entry is detectable.
@@ -212,7 +212,7 @@ exports.booksUpdateSetup = onCall(async req => {
 exports.booksImport = onCall({ timeoutSeconds: 300, memory: '1GiB' }, async req => {
   const { orgId, data } = req.data || {};
   const who = await memberOf(req, orgId, ['owner']);
-  if (!data || !data.setup || !Array.isArray(data.entries)) throw bad('That file is not a Church Books export');
+  if (!data || !data.setup || !Array.isArray(data.entries)) throw bad('That file is not a Fundwell export');
   const org = orgRef(orgId), st = await org.collection('ledger').doc('state').get();
   if (st.exists && st.data().seq > 0) throw new HttpsError('failed-precondition', 'These books already have entries; importing only works into empty books');
   const setup = JSON.parse(JSON.stringify({ ...data.setup, id: orgId })); delete setup.currentUser;
@@ -300,7 +300,7 @@ exports.booksJoinOrgs = onCall(async req => {
 // (BOOKS_PLATFORM_ADMINS) can do this — it's how the first church gets in without server keys.
 exports.booksCreateOrg = onCall(async req => {
   if (!req.auth) throw new HttpsError('unauthenticated', 'Sign in first');
-  if (!platformAdmin(req.auth.token)) throw new HttpsError('permission-denied', 'Only the Church Books administrator can start a new church');
+  if (!platformAdmin(req.auth.token)) throw new HttpsError('permission-denied', 'Only the Fundwell administrator can start a new church');
   const { orgId, setup: raw, personId } = req.data || {};
   if (typeof orgId !== 'string' || !/^[a-z0-9-]{2,40}$/.test(orgId)) throw bad('Church id: 2–40 lowercase letters, numbers or dashes');
   if (!raw || typeof raw !== 'object') throw bad('No setup');

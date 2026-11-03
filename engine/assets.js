@@ -1,4 +1,4 @@
-// Church Books engine — fixed assets: buildings, land, furniture, vehicles. Each is recorded at cost and its cost
+// Fundwell engine — fixed assets: buildings, land, furniture, vehicles. Each is recorded at cost and its cost
 // is spread over its useful life (straight line, by month, starting the month after it's put in service).
 // Land is never depreciated. Pure date math on 'YYYY-MM' / 'YYYY-MM-DD'; amounts are whole cents.
 //   asset: { id, name, account, fund, cost, placed: 'YYYY-MM-DD', lifeYears (0 = not depreciated), salvage?, disposed?: 'YYYY-MM-DD' }

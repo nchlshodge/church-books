@@ -1,4 +1,4 @@
-// Church Books engine — pledge campaigns (e.g. a three-year building campaign). A household pledges an amount
+// Fundwell engine — pledge campaigns (e.g. a three-year building campaign). A household pledges an amount
 // over the campaign and gives toward it as it goes; this works out what they've given, what's left, whether
 // they're on pace, and what each gift would need to be to finish on time. Whole cents; dates are 'YYYY-MM-DD'.
 (function (root, factory) {

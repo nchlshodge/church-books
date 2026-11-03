@@ -1,4 +1,4 @@
-# Church Books
+# Fundwell
 
 Fund accounting built for churches: giving and deposits, spending and receipts, budgets, missions partners,
 pledge campaigns, payroll records, bank match-up, board reports, and bringing data in from QuickBooks.

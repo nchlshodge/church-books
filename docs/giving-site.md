@@ -12,7 +12,7 @@ A simple, phone-first page where church members give. It's like Planning Center 
 - **Sign-in with no password:** the giver types an email and gets a 6-digit code plus a sign-in link.
 - **Each church's own look:** name, logo and color come from `setup.js` (an optional `brandColor`, or `givingSite: { color, rates, amounts }`).
 
-Money moves through **Stripe Connect**. Each church has its own connected Stripe account and is the merchant of record. Card and bank details are entered only in Stripe's own fields (the Payment Element and Financial Connections), so they never reach our servers. Church Books only sees ids, the last 4 digits, and amounts.
+Money moves through **Stripe Connect**. Each church has its own connected Stripe account and is the merchant of record. Card and bank details are entered only in Stripe's own fields (the Payment Element and Financial Connections), so they never reach our servers. Fundwell only sees ids, the last 4 digits, and amounts.
 
 The pure math lives in `engine/giving.js` (tested in `engine/test/giving.test.js`): recurring dates, fees, covering the fee, turning a payout's charges into amounts by way to give, and year totals.
 
@@ -21,7 +21,7 @@ The pure math lives in `engine/giving.js` (tested in `engine/test/giving.test.js
 | Piece | Choice | Why |
 |---|---|---|
 | Account type | **Standard** connected account, created through Connect onboarding from the books' Settings | The church owns its Stripe dashboard, its payouts, disputes and its nonprofit pricing. We never hold the money. |
-| Charges | **Direct charges** on the connected account (`Stripe-Account: acct_…`) | The church is the merchant of record. Its name appears on statements, and Stripe's fees come out of its balance. If Church Books charges for the service, that's an `application_fee_amount` or a plain subscription, decided separately. |
+| Charges | **Direct charges** on the connected account (`Stripe-Account: acct_…`) | The church is the merchant of record. Its name appears on statements, and Stripe's fees come out of its balance. If Fundwell charges for the service, that's an `application_fee_amount` or a plain subscription, decided separately. |
 | Payment methods | `us_bank_account` (ACH through Financial Connections, instant verification) and `card` (with Apple Pay / Google Pay) | Bank is the default and is labeled "Lowest fee": 0.8%, capped at $5, compared with 2.9% + 30¢ for cards. Rates live in `BooksGiving.RATES` and can be changed per church with `givingSite.rates`. |
 | Payouts | Daily automatic payouts to the church's deposit bank (`policies.depositBank`) | Each payout becomes one entry in the books, like the Planning Center payouts do today. |
 
@@ -169,7 +169,7 @@ Only owners and admins can refund. They do it from the gift in the books with `g
 
 ## Before it goes live
 
-1. Decide whether Church Books charges churches for giving (an application fee per gift, or part of the plan).
+1. Decide whether Fundwell charges churches for giving (an application fee per gift, or part of the plan).
 2. Fix the refund lines in `R.giftsDeposit` (see Into the books).
 3. Have the CPA confirm the wording on receipts and statements, and that fee-cover money goes to the operating fund.
 4. Do Stripe Connect onboarding for RCC in test mode, and run the page against Stripe's test clocks so recurring gifts can be watched over months.

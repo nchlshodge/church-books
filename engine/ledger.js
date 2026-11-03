@@ -1,4 +1,4 @@
-// Church Books engine — the ledger. Pure JavaScript, no Firebase, no DOM: runs in the browser and in Node.
+// Fundwell engine — the ledger. Pure JavaScript, no Firebase, no DOM: runs in the browser and in Node.
 //
 // The rules it enforces (these are what make the books trustworthy):
 //   • Every entry balances — debits equal credits — and balances within EACH fund,

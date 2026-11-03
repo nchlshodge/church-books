@@ -1,4 +1,4 @@
-// Church Books engine — turns one church's setup file into its books.
+// Fundwell engine — turns one church's setup file into its books.
 //
 // Nothing about any particular church lives in the engine. Each church has a setup
 // (see churches/<id>/setup.js) that names its funds, how giving is split, its bank

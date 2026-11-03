@@ -1,4 +1,4 @@
-// Church Books engine — who has to approve spending, and whether it's approved yet.
+// Fundwell engine — who has to approve spending, and whether it's approved yet.
 //
 // A church's policies set approval tiers by amount, e.g.
 //   approvalTiers: [{ upTo: 500, approvals: 1 }, { upTo: 10000, approvals: 2 }, { upTo: null, approvals: 2, board: true }]

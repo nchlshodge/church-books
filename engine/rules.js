@@ -1,4 +1,4 @@
-// Church Books engine — posting rules. Each function turns one everyday event into a ready-to-post entry.
+// Fundwell engine — posting rules. Each function turns one everyday event into a ready-to-post entry.
 // They only build entries; ledger.post() checks and saves them. All amounts are whole cents.
 //
 // Shared cash: the church has one checking account, but every fund owns a slice of it.

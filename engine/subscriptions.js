@@ -1,4 +1,4 @@
-// Church Books engine — subscriptions: anything the church pays for on a cycle (software, dues, curriculum).
+// Fundwell engine — subscriptions: anything the church pays for on a cycle (software, dues, curriculum).
 // Knowing them helps set budgets (they're a floor nobody gets to cut mid-year) and catch renewals and price
 // rises. Pure functions; amounts are whole cents, dates 'YYYY-MM-DD'.
 (function (root, factory) {

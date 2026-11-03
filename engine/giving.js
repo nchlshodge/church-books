@@ -1,4 +1,4 @@
-// Church Books engine — the congregation's giving page: recurring-gift dates, processing fees (and covering
+// Fundwell engine — the congregation's giving page: recurring-gift dates, processing fees (and covering
 // them), and turning a day's charges into one payout for the books. Pure functions; whole cents; dates are
 // 'YYYY-MM-DD' strings, and "today" is always passed in.
 //

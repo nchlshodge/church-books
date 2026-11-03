@@ -9,7 +9,7 @@
   name: 'Grace Community Church',
   shortName: 'Grace',
   address: 'Springfield, IL',
-  appName: 'Books',
+  appName: 'Fundwell',
   logo: '',
   timezone: 'America/Chicago',
   fiscalYearStart: '01-01',

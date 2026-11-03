@@ -1,4 +1,4 @@
-// Church Books engine — the standard chart of accounts every church starts with.
+// Fundwell engine — the standard chart of accounts every church starts with.
 // A church's own setup adds its bank accounts (1000–1099), cards (2000–2099) and
 // giving funds (4000–4099), plus any extra accounts it wants.
 //

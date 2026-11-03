@@ -1,4 +1,4 @@
-// Church Books engine — staff pay and raises. Pay grades (a midpoint with a range around it), where each person
+// Fundwell engine — staff pay and raises. Pay grades (a midpoint with a range around it), where each person
 // lands by years of service and hours, the whole package (salary, housing, health, retirement, gifts), what it
 // costs the church, and how next year compares with this year. Pure math; whole cents.
 //

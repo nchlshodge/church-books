@@ -1,4 +1,4 @@
-// Start a church in Church Books: its org record, its first setup and an invite for its owner.
+// Start a church in Fundwell: its org record, its first setup and an invite for its owner.
 //
 //   node tools/create-org.js --org rcc --setup ../churches/rcc/setup.js --owner you@church.org --person nick
 //

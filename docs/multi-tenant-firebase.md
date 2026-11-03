@@ -1,4 +1,4 @@
-# Church Books — saving to Firebase, many churches
+# Fundwell — saving to Firebase, many churches
 
 **Status:** built, tested, and deployed to `bedsidercc` (2026-10-19) · **First customer:** RCC
 

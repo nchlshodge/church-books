@@ -10,7 +10,7 @@
   name: 'Rochester Christian Church (2028, Kingdom Builders)',
   shortName: 'RCC',
   address: 'Rochester, NY',
-  appName: 'Books',
+  appName: 'Fundwell',
   logo: '../rcc-logo-plain.png',
   timezone: 'America/New_York',
   fiscalYearStart: '01-01',

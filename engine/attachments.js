@@ -1,4 +1,4 @@
-// Church Books engine — files attached to anything: receipts, invoices, W-9s, bank statements,
+// Fundwell engine — files attached to anything: receipts, invoices, W-9s, bank statements,
 // deposit slips, board minutes. Entries in the books are frozen, so files live beside them and are
 // linked by { kind, id } (e.g. { kind: 'bill', id: 'b3' } or { kind: 'entry', id: 'JE-0042' }).
 // A file is never really deleted: removing it hides it and records who and why (and files on a

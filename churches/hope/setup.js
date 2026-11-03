@@ -8,7 +8,7 @@
   name: 'Hope Fellowship',
   shortName: 'Hope',
   address: 'Canandaigua, NY',
-  appName: 'Books',
+  appName: 'Fundwell',
   logo: '',
   timezone: 'America/New_York',
   fiscalYearStart: '01-01',

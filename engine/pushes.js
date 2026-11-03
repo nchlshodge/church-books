@@ -1,4 +1,4 @@
-// Church Books engine — giving pushes: a monthly highlight (Ask, Update, Celebrate, Break) and the
+// Fundwell engine — giving pushes: a monthly highlight (Ask, Update, Celebrate, Break) and the
 // year-end Miracle Offering, with the dates worked out for any year. Pure date math on 'YYYY-MM-DD'.
 (function (root, factory) {
   if (typeof module === 'object' && module.exports) module.exports = factory();

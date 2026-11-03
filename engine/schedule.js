@@ -1,4 +1,4 @@
-// Church Books engine — dates for recurring payments (monthly missionary support, quarterly dues…).
+// Fundwell engine — dates for recurring payments (monthly missionary support, quarterly dues…).
 // Pure date math on 'YYYY-MM-DD' strings, so it behaves the same everywhere.
 //
 // A schedule: { start: '2026-01-01', every: 'monthly', day?: 31, lastRun?: '2026-09-01',

@@ -1,4 +1,4 @@
-// Church Books engine — reports built straight from the ledger. Nothing here is stored; it's all added up
+// Fundwell engine — reports built straight from the ledger. Nothing here is stored; it's all added up
 // from entries, so the reports can never drift from the books. Amounts are whole cents.
 (function (root, factory) {
   if (typeof module === 'object' && module.exports) module.exports = factory();

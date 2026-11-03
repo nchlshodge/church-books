@@ -1,4 +1,4 @@
-// Church Books engine — planning next year's budget: spreading amounts over the months and
+// Fundwell engine — planning next year's budget: spreading amounts over the months and
 // checking that each fund's planned spending fits what's expected to come in. Whole cents.
 //
 // A spread: { type: 'even' }                       — the same every month

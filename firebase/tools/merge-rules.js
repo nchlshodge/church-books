@@ -1,4 +1,4 @@
-// Puts the Church Books rules block into another app's rules files (the RCC Hub's), just before its
+// Puts the Fundwell rules block into another app's rules files (the RCC Hub's), just before its
 // final default-deny rule. Writes NEW files and changes nothing else:
 //   node tools/merge-rules.js ../../firestore-v21.rules ../../firestore-v22.rules ../../storage.rules ../../storage-v22.rules
 // Run it again whenever the books rules change; it replaces the old block if the file already has one.
