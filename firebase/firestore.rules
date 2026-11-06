@@ -15,8 +15,8 @@ service cloud.firestore {
       // A member whose access hasn't ended (untilMs: the last moment of access, for e.g. an auditor)
       function booksMember() { return request.auth != null && exists(booksMemberDoc()) && request.time.toMillis() < get(booksMemberDoc()).data.get('untilMs', 9999999999999); }
       function booksRole() { return get(booksMemberDoc()).data.role; }
-      function booksCanRead() { return booksMember() && booksRole() in ['owner', 'admin', 'bookkeeper', 'reviewer', 'viewer']; }
-      function booksCanWork() { return booksMember() && booksRole() in ['owner', 'admin', 'bookkeeper', 'reviewer']; }
+      function booksCanRead() { return booksMember() && booksRole() in ['owner', 'admin', 'bookkeeper', 'reviewer', 'viewer', 'entry']; }
+      function booksCanWork() { return booksMember() && booksRole() in ['owner', 'admin', 'bookkeeper', 'reviewer', 'entry']; }   // entry = data entry: records, never approves
       function booksSenderStatus(s) { return s in ['Needs receipt', 'Needs review']; }
       // Private information: the owner, and people the owner has given that kind of access to
       function booksPrivate(kind) { return booksMember() && (booksRole() == 'owner' || kind in get(booksMemberDoc()).data.get('access', [])); }

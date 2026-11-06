@@ -9,7 +9,7 @@ service firebase.storage {
       function booksMemberDoc() { return /databases/(default)/documents/orgs/$(org)/members/$(request.auth.uid); }
       function booksMember() { return request.auth != null && firestore.exists(booksMemberDoc()) && request.time.toMillis() < firestore.get(booksMemberDoc()).data.get('untilMs', 9999999999999); }
       function booksRole() { return firestore.get(booksMemberDoc()).data.role; }
-      allow read: if booksMember() && booksRole() in ['owner', 'admin', 'bookkeeper', 'reviewer', 'viewer'];
+      allow read: if booksMember() && booksRole() in ['owner', 'admin', 'bookkeeper', 'reviewer', 'viewer', 'entry'];
       allow create: if resource == null && booksMember()
         && request.resource.size < 25 * 1024 * 1024
         && (request.resource.contentType.matches('image/.*') || request.resource.contentType.matches('application/pdf')

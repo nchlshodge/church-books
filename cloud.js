@@ -20,7 +20,7 @@
   const shortOf = d => d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
   const META = ['version', 'updatedAt', 'updatedBy', 'what'];
   const strip = s => { const c = JSON.parse(JSON.stringify(s)); delete c.currentUser; META.forEach(k => delete c[k]); return c; };
-  const WORKERS = ['owner', 'admin', 'bookkeeper', 'reviewer'];
+  const WORKERS = ['owner', 'admin', 'bookkeeper', 'reviewer', 'entry'];
 
   const Cloud = window.Cloud = { replaying: false };
   // Kept apart from everyday work: who gave what (donors + non-cash gifts) and salaries (staff)
@@ -88,7 +88,7 @@
     if (me.untilMs && Date.now() > me.untilMs) throw new Error(`Your access ended on ${new Date(me.untilMs).toLocaleDateString()}.`);
     if (me.role === 'leader') { leaderScreen(); return false; }
     if (me.role === 'counter') { counterScreen(); return false; }
-    if (!['owner', 'admin', 'bookkeeper', 'reviewer', 'viewer'].includes(me.role)) throw new Error('Your role only sends receipts. The receipt page for phones is coming soon.');
+    if (!['owner', 'admin', 'bookkeeper', 'reviewer', 'viewer', 'entry'].includes(me.role)) throw new Error('Your role only sends receipts. The receipt page for phones is coming soon.');
     const [setupSnap, stateSnap, entriesSnap, wsSnap, expSnap] = await Promise.all([org.collection('settings').doc('setup').get(), org.collection('ledger').doc('state').get(),
       org.collection('entries').orderBy('seq').get(), org.collection('workspace').get(), org.collection('expenses').get()]);
     if (!setupSnap.exists) throw new Error('This church has no setup yet.');

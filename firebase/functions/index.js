@@ -21,10 +21,12 @@ const platformAdmin = token => !!token && token.email_verified === true &&
 const db = admin.firestore();
 
 const CAN_POST = ['owner', 'admin', 'bookkeeper', 'reviewer'];
+// Data entry records money in and out — deposits, receipts, checks — but never approves, reverses, locks or changes settings
+const CAN_ENTER = [...CAN_POST, 'entry'];
 const CAN_ADMIN = ['owner', 'admin'];
 // leader: a ministry leader — sees only reports for their own budgets. counter: counts the offering on Sunday.
-const ROLES = ['owner', 'admin', 'bookkeeper', 'reviewer', 'viewer', 'leader', 'counter', 'sender'];
-const COUNTERS = [...CAN_POST, 'counter'];
+const ROLES = ['owner', 'admin', 'bookkeeper', 'reviewer', 'viewer', 'leader', 'counter', 'sender', 'entry'];
+const COUNTERS = [...CAN_ENTER, 'counter'];
 // Data only some people may see, kept apart from everything else (who gave what, salaries, medical, benevolence)
 const PRIVATE = ['donors', 'payroll', 'medical', 'benevolence'];
 const ISO = /^\d{4}-\d{2}-\d{2}$/;
@@ -104,7 +106,7 @@ async function readBase(tx, orgId) {
 // Post one entry. expectId: the id the caller's own copy gave it (if they differ, the caller reloads).
 exports.booksPostEntry = onCall(async req => {
   const { orgId, draft: raw, expectId, approval } = req.data || {};
-  const who = await memberOf(req, orgId, CAN_POST), draft = cleanDraft(raw);
+  const who = await memberOf(req, orgId, CAN_ENTER), draft = cleanDraft(raw);
   return db.runTransaction(async tx => {
     const org = orgRef(orgId), { setup, state } = await readBase(tx, orgId);
     check(setup, state, draft);
@@ -356,7 +358,7 @@ exports.booksApprove = onCall(async req => {
 // ---- Check numbers, handed out by the server so none is used twice ----
 exports.booksReserveChecks = onCall(async req => {
   const { orgId, count = 1 } = req.data || {};
-  const who = await memberOf(req, orgId, CAN_POST), n = Math.floor(+count);
+  const who = await memberOf(req, orgId, CAN_ENTER), n = Math.floor(+count);
   if (!(n >= 1 && n <= 50)) throw bad('Reserve 1 to 50 checks at a time');
   return db.runTransaction(async tx => {
     const org = orgRef(orgId), { setup, state } = await readBase(tx, orgId), first = state.nextCheck || (setup.checks && setup.checks.nextNumber) || 1001;
@@ -471,7 +473,7 @@ exports.booksPcoMorningPull = onSchedule({ schedule: 'every day 06:00', timeZone
 // "Check now" — the same pull, on demand. today (optional, 'YYYY-MM-DD') is for tests.
 exports.booksPcoPullNow = onCall(async req => {
   const { orgId, today } = req.data || {};
-  await memberOf(req, orgId, CAN_POST);
+  await memberOf(req, orgId, CAN_ENTER);
   if (today != null && !ISO.test(today)) throw bad('today is a date like 2026-10-19');
   return pullPlanningCenter(orgId, today);
 });

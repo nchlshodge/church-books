@@ -88,3 +88,15 @@ test('expired access, owner-only reopening, and owner-only private access', asyn
   const m = (await db.doc(`orgs/${org}/members/${nu.uid}`).get()).data();
   assert.deepStrictEqual([m.role, m.access, m.untilMs > Date.now()], ['viewer', ['donors'], true]);
 });
+
+test('data entry records money but never approves, reverses, locks or sees private information', async () => {
+  const e = await makeOrg(org + 'e', { 'own-e@r.org': ['owner', 'lee'], 'entry-e@r.org': ['entry', 'office'] }), o = org + 'e';
+  const gift = { date: '2026-10-04', memo: 'Sunday offering', source: { type: 'test_gift', id: 'e1' }, lines: [{ account: '1000', fund: 'general', debit: 50000 }, { account: '4000', fund: 'general', credit: 50000 }] };
+  assert.strictEqual((await e['entry-e@r.org'].call('booksPostEntry', { orgId: o, draft: gift })).id, 'JE-00001');                                   // records a deposit
+  assert.strictEqual(await code(e['entry-e@r.org'].call('booksPostEntry', { orgId: o, draft: reimb('e2', 2000) })), 'failed-precondition');          // spending still needs approvals
+  assert.strictEqual(await code(e['entry-e@r.org'].call('booksApprove', { orgId: o, kind: 'expense', id: 'e2', amount: 20, submitter: 'youth' })), 'permission-denied');
+  assert.strictEqual(await code(e['entry-e@r.org'].call('booksReverseEntry', { orgId: o, entryId: 'JE-00001', reason: 'oops' })), 'permission-denied');
+  assert.strictEqual(await code(e['entry-e@r.org'].call('booksLockMonth', { orgId: o, through: '2026-09-30' })), 'permission-denied');
+  assert.strictEqual(await code(e['entry-e@r.org'].call('booksUpdateSetup', { orgId: o, setup: {} })), 'permission-denied');
+  assert.deepStrictEqual((await e['entry-e@r.org'].call('booksReserveChecks', { orgId: o, count: 1 })).numbers.length, 1);                           // writes checks
+});

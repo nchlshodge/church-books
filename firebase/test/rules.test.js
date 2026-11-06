@@ -20,7 +20,7 @@ test.before(async () => {
     await setDoc(doc(db, 'orgs/ra/expenses/e2'), { senderUid: 'vol', status: 'Done', json: '{}' });
     await setDoc(doc(db, 'bookUsers/vol'), { orgs: { ra: 'sender' } });
     await m('ra', 'payclerk', 'bookkeeper'); await setDoc(doc(db, 'orgs/ra/members/payclerk'), { role: 'bookkeeper', access: ['payroll'] });
-    await m('ra', 'lead', 'leader'); await m('ra', 'cnt', 'counter');
+    await m('ra', 'lead', 'leader'); await m('ra', 'cnt', 'counter'); await m('ra', 'clerk', 'entry');
     await setDoc(doc(db, 'orgs/ra/members/gone'), { role: 'viewer', untilMs: Date.now() - 1000 });
     await setDoc(doc(db, 'orgs/ra/private/payroll'), { json: '[]' }); await setDoc(doc(db, 'orgs/ra/private/donors'), { json: '[]' });
     await setDoc(doc(db, 'orgs/ra/counts/k1'), { status: 'waiting' }); await setDoc(doc(db, 'orgs/ra/alerts/a1'), { kind: 'payment' });
@@ -103,4 +103,12 @@ test('leaders, counters and expired access', async () => {
   await assertFails(getDoc(doc(as('rev'), 'orgs/ra/alerts/a1')));
   await assertSucceeds(getDoc(doc(as('owner'), 'orgs/ra/alerts/a1')));
   await assertFails(setDoc(doc(as('owner'), 'orgs/ra/approvals/expense:x1'), { done: true }));   // approvals are recorded by the server only
+});
+
+test('data entry reads the books and saves everyday work, but not private information', async () => {
+  const db = env.authenticatedContext('clerk').firestore();
+  await assertSucceeds(getDoc(doc(db, 'orgs/ra/entries/JE-00001')));
+  await assertSucceeds(setDoc(doc(db, 'orgs/ra/workspace/bills'), { json: '[1]' }));
+  await assertFails(getDoc(doc(db, 'orgs/ra/private/payroll'))); await assertFails(getDoc(doc(db, 'orgs/ra/private/donors')));
+  await assertFails(setDoc(doc(db, 'orgs/ra/entries/JE-00009'), { memo: 'by hand' }));
 });

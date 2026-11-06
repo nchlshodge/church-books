@@ -355,7 +355,7 @@
     <header class="topbar">
       <button class="btn navbtn" id="navBtn" aria-label="Open the menu" aria-controls="side" aria-expanded="false"><svg viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h16"/></svg><span id="navHere">Menu</span></button>
       <div class="search"><input class="input" type="search" placeholder="Search payees, amounts, funds…" aria-label="Search"></div>
-      <span class="mock">Mockup · sample data</span>
+      <span class="mock">Mockup · sample data</span><span id="viewAsWrap"></span>
       <div class="newwrap">
         <button class="btn primary" id="newBtn" aria-haspopup="true">+ New</button>
         <div class="menu" id="newMenu" role="menu">
@@ -680,7 +680,7 @@ const I = {
   chart: '<path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/>',
 };
 const NAV = [
-  { h: null, items: [{ k: 'home', l: 'Overview', i: 'home' }] },
+  { h: null, items: [{ k: 'home', l: 'Overview', i: 'home' }, { k: 'mydept', l: 'My department', i: 'chart', show: () => myRole() === 'leader' }, { k: 'snap', l: 'Send a receipt', i: 'out', show: () => ['leader', 'entry'].includes(myRole()) }] },
   { h: 'Money in', items: [{ k: 'giving', l: 'Giving & deposits', i: 'in', badge: () => lookCount() + (isReviewer() ? unsignedWeeks().length : 0) }, { k: 'commit', l: 'Commitments', i: 'chart', show: () => campaigns().length > 0 }, { k: 'pledges', l: 'Pledges', i: 'chart', show: () => PCAMPS.length > 0 }, { k: 'pushes', l: 'Giving pushes', i: 'spark', show: () => PUSHES.length > 0 || PARTNERS.length > 0 }, { k: 'rentals', l: 'Building rentals', i: 'key', badge: () => RENTALS.filter(r => rIssues(r).some(t => !/business/i.test(t))).length }, { k: 'donors', l: 'Donors & gifts', i: 'heart', badge: () => ncTodo().filter(g => { const s = ncNext(g); return s.due && s.due < TODAY; }).length }] },
   { h: 'Money out', items: [
     { k: 'expenses', l: 'Spending & receipts', i: 'out', badge: () => EXPENSES.filter(e => !e.receipt).length + REQUESTS.filter(r => r.status === 'Waiting').length },
@@ -710,10 +710,10 @@ const NAV = [
 function renderSide(active) {
   $('#side').innerHTML =
     `<a class="rcc-brand" href="#home">${SETUP.logo ? `<img src="${esc(SETUP.logo)}" alt="" onerror="this.onerror=null;this.src='shared/'+this.src.split('/').pop()">` : ''}<b>${esc(SETUP.shortName)}</b><span>${esc(SETUP.appName || PRODUCT)}</span></a>` +
-    NAV.map(g => (g.h ? `<h6>${g.h}</h6>` : '') + g.items.filter(n => !n.show || n.show()).map(n => {
+    NAV.map(g => { const items = g.items.filter(n => (!n.show || n.show()) && canOpen(n.k)); return items.length ? (g.h ? `<h6>${g.h}</h6>` : '') + items.map(n => {
       const b = n.badge ? n.badge() : 0;
-      return `<a href="#${n.k}" class="${n.k === active ? 'active' : ''}"><svg viewBox="0 0 24 24">${I[n.i]}</svg>${n.l}${b ? `<span class="badge">${b}</span>` : ''}</a>`;
-    }).join('')).join('') +
+      return `<a href="#${n.k}" class="${n.k === active ? 'active' : ''}"><svg viewBox="0 0 24 24">${I[n.i]}</svg>${n.k === 'home' && myRole() === 'entry' ? 'To do' : n.l}${b ? `<span class="badge">${b}</span>` : ''}</a>`;
+    }).join('') : ''; }).join('') +
     `<div class="foot">${esc(SETUP.name)}<br>Fiscal year ${YEAR}</div>`;
   const here = NAV.flatMap(g => g.items).find(n => n.k === active); $('#navHere').textContent = here ? here.l : 'Menu';
 }
@@ -805,10 +805,10 @@ V.giving = () => `
   <div class="grid g2 mb">${GIVING.map(g => `<div class="card"><div class="card-head"><h2><span class="dot" style="display:inline-block;background:${g.color};margin-right:8px"></span>${g.name}</h2>${isSplit(g.id) ? `<button class="linkbtn" data-alloc="${g.id}">Change percentages</button>` : ''}</div>
     <div class="sub">${isSplit(g.id) ? 'Split automatically: ' + allocText(g.id) : `Goes straight to ${fund(ALLOC[g.id].lines[0].to).name} — not split`}</div>${stackBar(ALLOC[g.id].lines)}</div>`).join('')}</div>
 
-  ${PCAMPS.map(c => { const { s } = campSummary(c); return `<div class="card mb"><div class="card-head"><h2>${esc(c.name)} pledges</h2><a href="#pledges" onclick="pledgeCamp='${c.id}'">Details →</a></div>
+  ${!seesTotals() ? '' : PCAMPS.map(c => { const { s } = campSummary(c); return `<div class="card mb"><div class="card-head"><h2>${esc(c.name)} pledges</h2><a href="#pledges" onclick="pledgeCamp='${c.id}'">Details →</a></div>
     <div class="sub">${fc(s.given)} given · ${fc(s.pledged)} pledged by ${s.households} households · goal ${fc(s.goal)} · ${s.pace >= 0 ? 'ahead of pace' : 'behind pace'} by ${fc(Math.abs(s.pace))}</div>
     <div class="bar"><i style="width:${Math.min(100, s.given / (s.goal || 1) * 100)}%;background:${giving(c.giving).color}"></i></div></div>`; }).join('')}
-  ${campaigns().map(g => { const s = campaignOf(g); return `<div class="card mb"><div class="card-head"><h2>${esc(g.name)} ${g.campaign.year} commitments</h2><a href="#commit" onclick="commitG='${g.id}'">Details →</a></div>
+  ${!seesTotals() ? '' : campaigns().map(g => { const s = campaignOf(g); return `<div class="card mb"><div class="card-head"><h2>${esc(g.name)} ${g.campaign.year} commitments</h2><a href="#commit" onclick="commitG='${g.id}'">Details →</a></div>
     <div class="sub">${fc(s.given)} given · ${fc(s.planTotal)} committed by ${s.households} households · goal ${fc(s.goal)} · ${s.pace >= 0 ? 'ahead of pace' : 'behind pace'} by ${fc(Math.abs(s.pace))}</div>
     <div class="bar"><i style="width:${Math.min(100, s.given / (s.goal || 1) * 100)}%;background:${g.color}"></i></div></div>`; }).join('')}
   <div class="card mb">
@@ -2313,7 +2313,24 @@ P.tiers = () => {
 /* ---------- Settings (admins only): the church's setup, edited in the app ----------
    Every change is tried on a copy of the setup and checked with BooksSetup.validateSetup()
    first; nothing is changed while there are problems. Each saved change is logged. */
-const isAdmin = () => (SETUP.admins || [SETUP.currentUser]).includes(SETUP.currentUser);
+// Who's looking. In the cloud: the signed-in person's role. In the mockup: whoever "Viewing as" picks (the owner by default).
+let VIEW_AS = null;
+const myRole = () => window.CLOUD ? CLOUD.role : (VIEW_AS ? VIEW_AS.role : 'owner');
+const myPerson = () => (!window.CLOUD && VIEW_AS && VIEW_AS.person) || SETUP.currentUser;
+const isAdmin = () => ['owner', 'admin'].includes(myRole()) && (SETUP.admins || [SETUP.currentUser]).includes(SETUP.currentUser);
+// Pages each limited role can open; every other role sees every page
+const ROLE_PAGES = { entry: ['home', 'giving', 'expenses', 'snap', 'cards', 'bills', 'checks', 'bank', 'import', 'partners', 'rentals', 'files',
+  'reports', 'report', 'board', 'budgets', 'funds', 'cash', 'books'], leader: ['mydept', 'report', 'snap'] };   // data entry also pulls reports; never settings, salaries or donors
+const canOpen = k => !ROLE_PAGES[myRole()] || ROLE_PAGES[myRole()].includes(k);
+const seesTotals = () => myRole() !== 'leader';
+// A department head's budgets: the ones they lead (a project inside one of them comes with it)
+const myBudgets = () => { const p = myPerson(), led = PROJECTS.filter(x => x.lead === p); return led.filter(x => !x.parent || !led.some(y => y.name === x.parent)); };
+const myBudgetNames = () => myBudgets().flatMap(b => [b.name, ...kids(b).map(k => k.name)]);
+const VIEW_AS_CHOICES = () => [['owner|' + SETUP.currentUser, `Admin — ${(PEOPLE[SETUP.currentUser] || {}).name || 'owner'}`],
+  ...Object.entries(PEOPLE).filter(([id, p]) => !p.group && id !== SETUP.currentUser).flatMap(([id, p]) => [
+    PROJECTS.some(b => b.lead === id) ? [`leader|${id}`, `Department head — ${p.name}`] : null]).filter(Boolean),
+  ...Object.entries(PEOPLE).filter(([id, p]) => !p.group && id !== SETUP.currentUser).slice(0, 1).map(([id, p]) => [`entry|${id}`, `Data entry — ${p.name}`]),
+  ['viewer|' + ((POL.approvers || []).find(x => x !== SETUP.currentUser) || SETUP.currentUser), 'Board member (view only)']];
 const SETUP_LOG = saved('setupLog', [{ v: 1, on: 'Jan 1, ' + YEAR, by: 'Setup', what: 'Church set up' }]);
 const logSetup = what => SETUP_LOG.push({ v: SETUP_LOG.length + 1, on: short(D) + ', ' + YEAR, by: ME, what });
 let setTab = 'church';
@@ -3264,7 +3281,7 @@ V.files = () => {
 P.billfiles = id => { const b = BILLS.find(x => x.id === id); return { kicker: 'Bill files', body: `<h2>${esc(vendor(b.vendor).name)} ${esc(b.number)} · ${fmt(b.amt)}</h2>${attachBox('bill', id, { role: 'invoice', title: 'Invoice and files', want: 'No invoice attached yet' })}`, actions: `<button class="btn" data-close>Done</button>` }; };
 
 // Cloud version: give someone a sign-in. They sign in with this email and land in these books with this role.
-const SIGNIN_ROLES = [['leader', 'Ministry leader — sees only their own budgets\' reports'], ['counter', 'Counter — counts the offering; a second counter confirms'], ['viewer', 'Viewer — elder or auditor: sees everything, changes nothing'],
+const SIGNIN_ROLES = [['leader', 'Department head — sees only the budgets they lead: what was budgeted, came in, went out and is left'], ['entry', 'Data entry — records giving, deposits, receipts, bills and bank lines, and pulls reports; no settings, salaries or donors'], ['counter', 'Counter — counts the offering; a second counter confirms'], ['viewer', 'Viewer — elder or auditor: sees everything, changes nothing'],
   ['reviewer', 'Reviewer — approves receipts and bills'], ['bookkeeper', 'Bookkeeper — records and pays'], ['admin', 'Admin — also changes the settings'], ['owner', 'Owner — also brings books in and sees private information']];
 const PRIVATE_KINDS = [['donors', 'Who gave what (donors and gifts of property)'], ['payroll', 'Salaries and pay'], ['medical', 'Medical reimbursements'], ['benevolence', 'Benevolence (who was helped)']];
 P.invite = () => ({
@@ -4037,6 +4054,7 @@ function rangeDates(k) {
 const reportNames = p => [p.name, ...kids(p).map(k => k.name)];
 function reportData(name, k) {
   const p = PROJECTS.find(x => x.name === name), names = reportNames(p), rd = rangeDates(k), r = BooksReports.projectReport(BOOKS, { projects: names, ...rd });
+  if (myRole() === 'leader') { const pay = new Set(BOOKS.accounts.filter(a => a.sub === 'payroll').map(a => a.code)); r.lines = r.lines.map(l => pay.has(l.account) ? { ...l, party: null, memo: 'Staff pay' } : l); }
   const events = REG.events.filter(e => names.includes(e.proj)), people = events.reduce((t, e) => t + (e.signups || 0), 0);
   const missing = EXPENSES.filter(e => !e.receipt && parts(e).some(x => names.includes(x.proj)));
   return { p, names, r, rd, events, people, missing, held: names.reduce((t, n) => t + cents(held(project(n))), 0), subsYear: subYear(names), subs: subsIn(names) };
@@ -4637,13 +4655,52 @@ P.seasonclose = name => {
         (p.closeouts = p.closeouts || []).push({ date: d, amount, to: toP, je: je.id }); closePanel(); render(); toast(`${fc(amount)} moved from ${p.name} to ${toP}`); }
       catch (err) { toast(err.message); } }; } };
 };
+/* ---------- What each role sees ----------
+   Admin (owner/admin): everything. Data entry: the screens where money is recorded — no reports, totals, budgets,
+   salaries or donors; their home is a to-do list. Department head ("leader"): only the budgets they lead — budgeted,
+   came in, went out, left, line by line. In the cloud the server enforces the private parts (donors, salaries) and a
+   department head never receives the rest of the books; in the mockup "Viewing as" shows each role. */
+const myDeptIntro = () => `Each line of money in and out for the budgets you lead. Staff pay shows as one line, without names.`;
+V.entryhome = () => {
+  const name = (PEOPLE[myPerson()] || {}).name || '';
+  const todo = [
+    [PAYOUTS.filter(p => p.status === 'New' && p.look).length, 'online giving payouts need a look', 'giving'],
+    [CASH.filter(c => c.status === 'Counted').length, 'counted offerings to take to the bank', 'giving'],
+    [REG.payouts.filter(x => x.status === 'New').length, 'event sign-up payouts to record', 'giving'],
+    [EXPENSES.filter(e => !e.receipt).length, 'charges still missing a receipt', 'expenses'],
+    [BILLS.filter(b => b.status === 'Approved').length, 'approved bills to pay', 'bills'],
+    [BANKLINES.filter(l => !l.ok).length, 'bank lines to match', 'bank'],
+    [EXPENSES.filter(e => e.status === 'Needs review').length, 'receipts waiting for a reviewer — nothing for you to do', 'expenses', true],
+  ];
+  const open = todo.filter(t => t[0] && !t[3]).length;
+  return `<div class="vhead"><div><h1>Hi${name ? ', ' + esc(name.split(' ')[0]) : ''} 👋</h1><p>${open ? `${open} thing${open === 1 ? '' : 's'} to enter or match.` : 'Everything is entered and matched.'} Reports are under Keep track.</p></div>
+      <div class="acts"><button class="btn primary" data-open="cash">Record cash &amp; checks</button><button class="btn" data-open="expense">Add an expense</button><button class="btn" data-open="check">Write a check</button><button class="btn" data-go="import">Bring in a file</button></div></div>
+    <div class="card">${todo.map(([n, label, go, info]) => `<div class="fund"><div class="nm">${n ? `<b>${n}</b> ${esc(label)}` : `<span class="muted">No ${esc(label.replace(/ — .*/, ''))}</span>`}</div>${n && !info ? `<button class="btn small primary" data-go="${go}">Go</button>` : n ? '<span class="pill gray">Waiting</span>' : '<span class="pill green">✓</span>'}</div>`).join('')}</div>`;
+};
+V.mydept = () => {
+  const list = myBudgets(), who = (PEOPLE[myPerson()] || {}).name || '';
+  if (!list.length) return `<div class="vhead"><div><h1>My department</h1><p>No budgets are assigned to ${esc(who || 'you')} yet. An admin sets who leads each budget under Budgets.</p></div></div>`;
+  const card = b => { const ks = kids(b), sp = cents(spent(b)), inc = cents(incomeOf(b)), left = cents(leftIn(b)), bud = cents(b.budget), used = bud ? sp / bud : 0;
+    return `<div class="card mb"><div class="card-head"><h2>${esc(b.name)}</h2><span class="muted small">${esc(fund(b.fund).name)}</span></div>
+      <div class="grid g4" style="margin:8px 0"><div><div class="muted small">Budget ${YEAR}</div><div class="num" style="font-size:20px;font-weight:700">${fc(bud)}</div></div>
+        <div><div class="muted small">Came in</div><div class="num" style="font-size:20px;font-weight:700">${fc(inc)}</div></div>
+        <div><div class="muted small">Went out</div><div class="num" style="font-size:20px;font-weight:700">${fc(sp)}</div></div>
+        <div><div class="muted small">Left to spend</div><div class="num ${left < 0 ? 'neg' : ''}" style="font-size:20px;font-weight:700">${fc(left)}</div></div></div>
+      <div class="bar" style="height:10px"><i style="width:${Math.min(100, used * 100)}%;background:${fund(b.fund).color}"></i></div>
+      <div class="muted small" style="margin:6px 0 10px">${Math.round(used * 100)}% of the budget used · the year is ${Math.round(YEAR_DONE * 100)}% done${keepsIncome(b) ? ' · what comes in adds to what you can spend' : ''}</div>
+      ${ks.map(k => `<div class="fund" style="padding:7px 0"><div class="nm" style="font-weight:500">↳ ${esc(k.name)}<small>${fc(cents(spent(k)))} of ${fc(cents(k.budget))}${incomeOf(k) ? ` · ${fc(cents(incomeOf(k)))} came in` : ''}</small></div><button class="btn small soft" data-rpt="${esc(k.name)}">Lines</button></div>`).join('')}
+      <button class="btn small primary" data-rpt="${esc(b.name)}" style="margin-top:8px">See every line</button></div>`; };
+  return `<div class="vhead"><div><h1>My department</h1><p>${esc(who)} · ${myDeptIntro()}</p></div><div class="acts"><a class="btn" href="#snap">📱 Send a receipt</a></div></div>${list.map(card).join('')}`;
+};
 V.report = () => {
   const tops = PROJECTS.filter(p => !p.parent);
   if (!reportOf || !PROJECTS.some(p => p.name === reportOf)) reportOf = (PROJECTS.find(p => /youth/i.test(p.name) && !p.parent) || tops[0]).name;
+  if (myRole() === 'leader' && !myBudgetNames().includes(reportOf)) reportOf = (myBudgets()[0] || {}).name;   // a department head sees only their own
+  if (!reportOf) return V.mydept();
   const d = reportData(reportOf, reportRange), { p, r } = d, budget = cents(p.budget), isEvent = !!p.date, left = cents(leftIn(p)), used = budget ? (r.spent + d.held) / budget : 0;
   const color = fund(p.fund).color;
   return `<div class="vhead"><div><h1>${esc(p.parent ? p.parent + ' › ' : '')}${esc(p.name)}</h1><p>${isEvent ? 'Event' : 'Ministry'} report · ${esc(fund(p.fund).name)} · led by ${esc(PEOPLE[p.lead] ? PEOPLE[p.lead].name : '')}${isEvent ? ' · ' + esc(p.date) : ''}${d.names.length > 1 ? ` · includes ${andList(d.names.slice(1).map(esc))}` : ''}</p></div>
-      <div class="acts"><select class="select" id="rptPick">${projOptions(p.name)}</select><select class="select" id="rptRange">${Object.entries(RANGES).map(([k, l]) => `<option value="${k}" ${k === reportRange ? 'selected' : ''}>${l}</option>`).join('')}</select><button class="btn" data-rptprint>🖨 Print</button><button class="btn primary" data-rptsend>Email to ${esc(PEOPLE[p.lead] ? PEOPLE[p.lead].name.split(' ')[0] : 'the leader')}</button></div></div>
+      <div class="acts"><select class="select" id="rptPick">${myRole() === 'leader' ? myBudgetNames().map(n => `<option ${n === p.name ? 'selected' : ''}>${esc(n)}</option>`).join('') : projOptions(p.name)}</select><select class="select" id="rptRange">${Object.entries(RANGES).map(([k, l]) => `<option value="${k}" ${k === reportRange ? 'selected' : ''}>${l}</option>`).join('')}</select><button class="btn" data-rptprint>🖨 Print</button><button class="btn primary" data-rptsend ${seesTotals() ? '' : 'hidden'}>Email to ${esc(PEOPLE[p.lead] ? PEOPLE[p.lead].name.split(' ')[0] : 'the leader')}</button></div></div>
     <div class="grid g4 mb"><div class="card stat"><div class="k">Budget ${YEAR}</div><div class="v num">${fc(budget)}</div><div class="d">${reportRange === 'ytd' ? `${Math.round(YEAR_DONE * 100)}% of the year gone` : esc(RANGES[reportRange])}</div></div>
       <div class="card stat"><div class="k">Spent</div><div class="v num">${fc(r.spent)}</div><div class="d">${d.held ? `+ ${fc(d.held)} held for approved purchases` : `${Math.round(used * 100)}% of the budget`}</div></div>
       <div class="card stat"><div class="k">Came in</div><div class="v num">${fc(r.income)}</div><div class="d">${(h => h > 0 ? `+ ${fc(h)} held until the event happens` : '')(d.names.reduce((s, n) => s + BOOKS.natural('2400', { project: n }), 0)) || r.incomeByCategory.map(x => esc(x.key)).join(', ') || 'Sign-ups, fees, gifts for it'}</div></div>
@@ -4848,15 +4905,19 @@ function closePanel() { $('#scrim').classList.remove('show'); $('#panel').classL
 function render() {
   syncFromBooks(); expireRequests(); syncFiles();
   if (window.CLOUD) Cloud.changed();
-  const k = location.hash.slice(1) || 'home';
-  const view = V[k] ? k : 'home';
+  const k = location.hash.slice(1) || (myRole() === 'leader' ? 'mydept' : 'home');
+  let view = V[k] ? k : 'home'; if (!canOpen(view)) view = ROLE_PAGES[myRole()][0];   // a page this role doesn't get goes to their home
   renderSide(view);
-  $('#view').innerHTML = `<div class="view">${V[view]()}</div>`;
+  $('#view').innerHTML = `<div class="view">${V[view === 'home' && myRole() === 'entry' ? 'entryhome' : view]()}</div>`;
   document.querySelectorAll('#view .spl').forEach(splitRecalc);
 }
 window.addEventListener('hashchange', () => { setNav(false); render(); window.scrollTo(0, 0); });
 $('#navBtn').onclick = e => { e.stopPropagation(); $('#newMenu').classList.remove('show'); setNav(!document.body.classList.contains('navopen')); };
 $('#navScrim').onclick = () => setNav(false);
+// Mockup: see the app as each role would
+if (!window.CLOUD) { $('#viewAsWrap').innerHTML = `<select class="select" id="viewAs" title="See the app as each role would" style="max-width:230px">${VIEW_AS_CHOICES().map(([v, l]) => `<option value="${v}">Viewing as: ${esc(l)}</option>`).join('')}</select>`;
+  $('#viewAs').onchange = e => { const [role, person] = e.target.value.split('|'); VIEW_AS = role === 'owner' ? null : { role, person };
+    document.body.classList.toggle('readonly', role === 'viewer'); closePanel(); location.hash = ''; render(); toast(role === 'owner' ? 'Back to the admin view' : `Now seeing what ${e.target.selectedOptions[0].textContent.replace('Viewing as: ', '')} sees`); }; }
 // Bring in data: click the drop area to choose a file, or drop one on it
 document.addEventListener('click', e => { if (e.target.closest('#impDrop')) $('#impFile').click(); });
 document.addEventListener('dragover', e => { if (e.target.closest('#impDrop')) { e.preventDefault(); e.target.closest('#impDrop').classList.add('over'); } });
