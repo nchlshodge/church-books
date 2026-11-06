@@ -20,7 +20,7 @@ test.before(async () => {
     await setDoc(doc(db, 'orgs/ra/expenses/e2'), { senderUid: 'vol', status: 'Done', json: '{}' });
     await setDoc(doc(db, 'bookUsers/vol'), { orgs: { ra: 'sender' } });
     await m('ra', 'payclerk', 'bookkeeper'); await setDoc(doc(db, 'orgs/ra/members/payclerk'), { role: 'bookkeeper', access: ['payroll'] });
-    await m('ra', 'lead', 'leader'); await m('ra', 'cnt', 'counter'); await m('ra', 'clerk', 'entry');
+    await m('ra', 'lead', 'leader'); await m('ra', 'cnt', 'counter'); await m('ra', 'clerk', 'entry'); await setDoc(doc(db, 'orgs/ra/members/yclerk'), { role: 'entry', budgets: ['Youth'] }); await m('ra', 'campusA', 'campus'); await m('ra', 'payA', 'payroll');
     await setDoc(doc(db, 'orgs/ra/members/gone'), { role: 'viewer', untilMs: Date.now() - 1000 });
     await setDoc(doc(db, 'orgs/ra/private/payroll'), { json: '[]' }); await setDoc(doc(db, 'orgs/ra/private/donors'), { json: '[]' });
     await setDoc(doc(db, 'orgs/ra/counts/k1'), { status: 'waiting' }); await setDoc(doc(db, 'orgs/ra/alerts/a1'), { kind: 'payment' });
@@ -111,4 +111,13 @@ test('data entry reads the books and saves everyday work, but not private inform
   await assertSucceeds(setDoc(doc(db, 'orgs/ra/workspace/bills'), { json: '[1]' }));
   await assertFails(getDoc(doc(db, 'orgs/ra/private/payroll'))); await assertFails(getDoc(doc(db, 'orgs/ra/private/donors')));
   await assertFails(setDoc(doc(db, 'orgs/ra/entries/JE-00009'), { memo: 'by hand' }));
+});
+
+test('people limited to part of the books can\'t read the whole ledger; the payroll administrator sees payroll', async () => {
+  for (const uid of ['yclerk', 'campusA', 'payA']) await assertFails(getDoc(doc(env.authenticatedContext(uid).firestore(), 'orgs/ra/entries/JE-00001')));
+  await assertFails(setDoc(doc(env.authenticatedContext('yclerk').firestore(), 'orgs/ra/workspace/bills'), { json: '[]' }));   // a partial copy never overwrites the church's list
+  const pay = env.authenticatedContext('payA').firestore();
+  await assertSucceeds(getDoc(doc(pay, 'orgs/ra/private/payroll'))); await assertFails(getDoc(doc(pay, 'orgs/ra/private/donors')));
+  await assertSucceeds(setDoc(doc(pay, 'orgs/ra/private/payroll'), { json: '[]', updatedAt: 'x', updatedBy: 'y' }));
+  await assertFails(setDoc(doc(pay, 'orgs/ra/payPlans/2027'), { plan: '{}' }));   // only the server records an approved pay plan
 });

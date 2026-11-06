@@ -6,6 +6,9 @@
 //   restrictedMinApprovals: 2             // money given for a purpose always gets at least this many
 // Rules that always hold: nobody approves their own spending, a person counts once, and a
 // tier marked board needs a recorded board vote (date + where it's written down).
+// Department step (deptApproval, on unless a church turns it off): the head of the department the money is for says
+// yes first, then finance approves as usual. Their yes isn't a finance approval and doesn't count twice. If the
+// department head is the one who spent it, the department step is skipped — finance's approvals still stand guard.
 (function (root, factory) {
   if (typeof module === 'object' && module.exports) module.exports = factory();
   else root.BooksApprovals = factory();
@@ -14,27 +17,32 @@
   const approversOf = pol => pol.approvers || pol.reviewers || [];
 
   // What this amount needs. amount is in dollars (or cents — just be consistent with upTo).
-  function planFor(pol, { amount, restricted }) {
+  function planFor(pol, { amount, restricted, dept }) {
     const tier = tiersOf(pol).find(t => t.upTo == null || amount <= t.upTo);
     let approvals = tier.approvals;
     if (restricted) approvals = Math.max(approvals, pol.restrictedMinApprovals || 0);
-    return { tier, approvals, board: !!tier.board, restricted: !!restricted };
+    return { tier, approvals, board: !!tier.board, restricted: !!restricted, dept: pol.deptApproval !== false && dept ? dept : null };
   }
 
   // approvals: [{ by: personId, on }] or { kind: 'board', on, note }. submitter: personId who spent / entered it.
   function status(pol, plan, approvals, { submitter } = {}) {
     const allowed = approversOf(pol), seen = new Set(), problems = [];
     const people = [];
-    (approvals || []).filter(a => a.kind !== 'board').forEach(a => {
+    const deptNeeded = !!plan.dept && plan.dept !== submitter;
+    const deptBy = deptNeeded ? ((approvals || []).find(a => a.kind === 'dept' && a.by === plan.dept) || null) : null;
+    (approvals || []).filter(a => a.kind === 'dept' && a.by !== plan.dept).forEach(() => problems.push('not_dept_head'));
+    if (deptBy) seen.add(deptBy.by);                      // the department head's yes doesn't also count for finance
+    (approvals || []).filter(a => a.kind !== 'board' && a.kind !== 'dept').forEach(a => {
       if (a.by === submitter) problems.push('self');
       else if (!allowed.includes(a.by)) problems.push('not_allowed');
       else if (seen.has(a.by)) problems.push('twice');
       else { seen.add(a.by); people.push(a.by); }
     });
     const boardOk = !plan.board || (approvals || []).some(a => a.kind === 'board' && a.on);
-    const done = people.length >= plan.approvals && boardOk;
+    const deptOk = !deptNeeded || !!deptBy;
+    const done = deptOk && people.length >= plan.approvals && boardOk;
     const canStill = allowed.filter(id => id !== submitter && !seen.has(id));
-    return { done, have: people.length, need: plan.approvals, boardOk, people, problems, canStill,
+    return { done, have: people.length, need: plan.approvals, boardOk, deptOk, deptNeeded, dept: plan.dept, people, problems, canStill,
       stuck: !done && people.length + canStill.length < plan.approvals };   // not enough eligible people left
   }
 

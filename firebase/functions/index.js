@@ -22,10 +22,10 @@ const db = admin.firestore();
 
 const CAN_POST = ['owner', 'admin', 'bookkeeper', 'reviewer'];
 // Data entry records money in and out — deposits, receipts, checks — but never approves, reverses, locks or changes settings
-const CAN_ENTER = [...CAN_POST, 'entry'];
+const CAN_ENTER = [...CAN_POST, 'entry', 'campus', 'payroll'];   // campus admins and payroll administrators record too, inside their limits
 const CAN_ADMIN = ['owner', 'admin'];
 // leader: a ministry leader — sees only reports for their own budgets. counter: counts the offering on Sunday.
-const ROLES = ['owner', 'admin', 'bookkeeper', 'reviewer', 'viewer', 'leader', 'counter', 'sender', 'entry'];
+const ROLES = ['owner', 'admin', 'bookkeeper', 'reviewer', 'viewer', 'leader', 'counter', 'sender', 'entry', 'campus', 'payroll'];
 const COUNTERS = [...CAN_ENTER, 'counter'];
 // Data only some people may see, kept apart from everything else (who gave what, salaries, medical, benevolence)
 const PRIVATE = ['donors', 'payroll', 'medical', 'benevolence'];
@@ -34,6 +34,16 @@ const ISO = /^\d{4}-\d{2}-\d{2}$/;
 const bad = msg => new HttpsError('invalid-argument', msg);
 const orgRef = id => db.doc(`orgs/${id}`);
 const srcKey = s => encodeURIComponent(`${s.type}:${s.id}`);
+// The budgets someone is limited to (department data entry: their budgets; campus admin: their campus's), with the
+// projects inside them. null = no limit.
+function scopeOf(who, setup) {
+  const all = setup.budgets || [];
+  const names = who.role === 'campus' ? ((setup.campuses || []).find(c => c.id === who.campus) || {}).budgets || []
+    : who.role === 'entry' && (who.budgets || []).length ? who.budgets : null;   // data entry with no departments picked covers them all
+  if (!names) return null;
+  return new Set(names.flatMap(n => [n, ...all.filter(b => b.parent === n).map(b => b.name)]));
+}
+const payrollEntry = d => !!d.source && d.source.type === 'payroll';
 const now = () => new Date().toISOString();
 
 // Who's calling, and may they do this in this church?
@@ -57,6 +67,7 @@ function approvalNeeded(d) {
   if (!d.source) return null;
   if (d.source.type === 'bill') return 'bill';
   if (d.source.type === 'expense' && !d.lines.some(l => /^20\d\d$/.test(l.account) && l.credit)) return 'expense';
+  if (d.source.type === 'check') return 'check';   // a check written by hand (not paying an approved bill or receipt) is approved like spending
   return null;
 }
 const spendTotal = d => d.lines.filter(l => /^5/.test(l.account)).reduce((s, l) => s + l.debit - l.credit, 0);
@@ -107,10 +118,14 @@ async function readBase(tx, orgId) {
 exports.booksPostEntry = onCall(async req => {
   const { orgId, draft: raw, expectId, approval } = req.data || {};
   const who = await memberOf(req, orgId, CAN_ENTER), draft = cleanDraft(raw);
+  if (who.role === 'payroll' && !payrollEntry(draft)) throw new HttpsError('permission-denied', 'The payroll administrator records payroll only');
   return db.runTransaction(async tx => {
     const org = orgRef(orgId), { setup, state } = await readBase(tx, orgId);
     check(setup, state, draft);
     // Spending that needs approval can only be booked once the server has recorded enough approvals, for this amount
+    // someone limited to certain budgets books income and spending only to those budgets
+    const scope = scopeOf(who, setup);
+    if (scope && draft.lines.some(l => /^[45]/.test(l.account) && !scope.has(l.project))) throw new HttpsError('permission-denied', 'That\'s outside the budgets you\'re set up for');
     const need = approvalNeeded(draft);
     let ap = null, ck = null;
     if (need) {
@@ -258,7 +273,7 @@ exports.booksImport = onCall({ timeoutSeconds: 300, memory: '1GiB' }, async req 
 // Invites: an admin invites an email address with a role; that person signs in and joins.
 // budgets: for a ministry leader, the budgets they can see · until: last day of access (YYYY-MM-DD) · access: private data they may see
 exports.booksInviteMember = onCall(async req => {
-  const { orgId, email, role, personId, budgets, until, access } = req.data || {};
+  const { orgId, email, role, personId, budgets, until, access, campus, reports } = req.data || {};
   const who = await memberOf(req, orgId, CAN_ADMIN);
   const em = String(email || '').trim().toLowerCase();
   if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(em)) throw bad('That email address does not look right');
@@ -268,7 +283,10 @@ exports.booksInviteMember = onCall(async req => {
   if (until && !ISO.test(until)) throw bad('The end date is YYYY-MM-DD');
   const acc = Array.isArray(access) ? access.filter(a => PRIVATE.includes(a)) : [];
   if (acc.length && who.role !== 'owner') throw new HttpsError('permission-denied', 'Only an owner can give access to private information');
-  const grant = { role, personId: personId || null, invitedBy: who.uid, at: now(), ...(role === 'leader' ? { budgets: budgets.map(String) } : {}),
+  if (role === 'campus') { const st = (await orgRef(orgId).collection('settings').doc('setup').get()).data() || {}; if (!(st.campuses || []).some(c => c.id === campus)) throw bad('Pick the campus this admin runs'); }
+  const scoped = role === 'leader' || (role === 'entry' && Array.isArray(budgets) && budgets.length);   // data entry can be limited to certain departments
+  const grant = { role, personId: personId || null, invitedBy: who.uid, at: now(), ...(scoped ? { budgets: budgets.map(String) } : {}),
+    ...(role === 'campus' ? { campus: String(campus) } : {}), ...(role === 'entry' && reports === false ? { reports: false } : {}),
     ...(until ? { untilMs: Date.parse(until + 'T23:59:59') } : {}), ...(acc.length ? { access: acc } : {}) };
   await db.doc(`bookInvites/${em}`).set({ orgs: { [orgId]: grant } }, { merge: true });
   await orgRef(orgId).collection('audit').add({ at: now(), by: who.name || who.uid, uid: who.uid, action: 'invite', email: em, role, until: until || null, access: acc });
@@ -287,7 +305,7 @@ exports.booksJoinOrgs = onCall(async req => {
       if (!(await mRef.get()).exists) {
         const setup = await db.doc(`orgs/${orgId}/settings/setup`).get(), person = setup.exists && i.personId ? (setup.data().people || {})[i.personId] : null;
         await mRef.set({ role: i.role, personId: i.personId || null, name: (person && person.name) || name || em, email: em, invitedBy: i.invitedBy || null, joinedAt: now(),
-          ...(i.budgets ? { budgets: i.budgets } : {}), ...(i.untilMs ? { untilMs: i.untilMs } : {}), ...(i.access ? { access: i.access } : {}) });
+          ...(i.budgets ? { budgets: i.budgets } : {}), ...(i.campus ? { campus: i.campus } : {}), ...(i.reports === false ? { reports: false } : {}), ...(i.untilMs ? { untilMs: i.untilMs } : {}), ...(i.access ? { access: i.access } : {}) });
         joined.push(orgId);
       }
       await db.doc(`bookUsers/${req.auth.uid}`).set({ email: em, orgs: { [orgId]: i.role } }, { merge: true });
@@ -329,9 +347,9 @@ exports.booksCreateOrg = onCall(async req => {
 // church's policy, the tiers decide how many are needed, and if the amount changes the approvals start over.
 // kind: 'expense' | 'bill' · amount: dollars · submitter: the person who spent it or entered the bill
 exports.booksApprove = onCall(async req => {
-  const { orgId, kind, id, amount, restricted, submitter, board } = req.data || {};
-  const who = await memberOf(req, orgId, CAN_POST);
-  if (!['expense', 'bill'].includes(kind) || !id) throw bad('Approve an expense or a bill');
+  const { orgId, kind, id, amount, restricted, submitter, board, budget } = req.data || {};
+  const who = await memberOf(req, orgId, [...CAN_POST, 'leader', 'campus']);
+  if (!['expense', 'bill', 'check'].includes(kind) || !id) throw bad('Approve an expense, a bill or a check');
   const amt = Math.round(+amount * 100);
   if (!(amt > 0)) throw bad('The amount has to be more than zero');
   if (!who.personId) throw new HttpsError('failed-precondition', 'Your sign-in isn\'t linked to anyone in the people list');
@@ -340,18 +358,27 @@ exports.booksApprove = onCall(async req => {
     const pol = { ...(setup.policies || {}) }; pol.approvers = pol.approvers || pol.reviewers || [];
     const prev = cur.exists && cur.data().amount === amt ? cur.data() : null;   // a new amount starts over
     const list = prev ? prev.list.slice() : [], boardVote = board && board.on ? { kind: 'board', on: String(board.on), note: String(board.note || '').slice(0, 200) } : (prev && prev.board) || null;
+    // The department head comes from the setup (the lead of the budget, or of the ministry it's inside), never from the browser
+    const all = setup.budgets || [], b = all.find(x => x.name === (prev ? prev.budget : budget)), top = b && b.parent ? all.find(x => x.name === b.parent) : b;
+    const dept = top && top.lead && (setup.people || {})[top.lead] && !(setup.people || {})[top.lead].group ? top.lead : null;
+    const camp = (setup.campuses || []).find(c => c.admin && top && (c.budgets || []).includes(top.name));   // a campus admin is an approver for their campus
+    if (camp && !pol.approvers.includes(camp.admin)) pol.approvers = [...pol.approvers, camp.admin];
+    if (who.role === 'campus' && !(camp && camp.id === who.campus)) throw new HttpsError('permission-denied', 'That isn\'t your campus\'s spending');
+    const plan = Approvals.planFor(pol, { amount: amt / 100, restricted: !!restricted, dept });
+    const deptStep = !!plan.dept && plan.dept !== submitter && !list.some(a => a.kind === 'dept');
     if (board && board.on && !CAN_ADMIN.includes(who.role)) throw new HttpsError('permission-denied', 'Only an admin can record a board vote');
     if (!board || !board.on) {
       if (who.personId === submitter) throw new HttpsError('permission-denied', 'You can\'t approve your own spending');
-      if (!pol.approvers.includes(who.personId)) throw new HttpsError('permission-denied', 'You\'re not one of the approvers');
       if (list.some(a => a.by === who.personId)) throw new HttpsError('already-exists', 'You already approved this');
-      list.push({ by: who.personId, uid: who.uid, at: now() });
+      if (deptStep && who.personId === plan.dept) list.push({ by: who.personId, uid: who.uid, at: now(), kind: 'dept' });
+      else if (who.role === 'leader') throw new HttpsError('permission-denied', 'Department heads approve only their own department\'s spending, as the first step');
+      else if (!pol.approvers.includes(who.personId)) throw new HttpsError('permission-denied', 'You\'re not one of the approvers');
+      else list.push({ by: who.personId, uid: who.uid, at: now() });
     }
-    const plan = Approvals.planFor(pol, { amount: amt / 100, restricted: !!restricted });
     const st = Approvals.status(pol, plan, [...list, ...(boardVote ? [boardVote] : [])], { submitter });
-    tx.set(ref, { kind, id: String(id), amount: amt, submitter: submitter || null, restricted: !!restricted, list, board: boardVote, need: plan.approvals, needsBoard: plan.board, done: st.done, updatedAt: now() });
+    tx.set(ref, { kind, id: String(id), amount: amt, submitter: submitter || null, restricted: !!restricted, budget: (prev ? prev.budget : budget) || null, dept: plan.dept, list, board: boardVote, need: plan.approvals, needsBoard: plan.board, done: st.done, updatedAt: now() });
     tx.create(org.collection('audit').doc(), { at: now(), by: who.name || who.uid, uid: who.uid, action: 'approve', item: `${kind}:${id}`, amount: amt, done: st.done });
-    return { done: st.done, have: st.have, need: st.need, boardOk: st.boardOk, list: list.map(a => ({ by: a.by, at: a.at })) };
+    return { done: st.done, have: st.have, need: st.need, boardOk: st.boardOk, deptOk: st.deptOk, dept: plan.dept, list: list.map(a => ({ by: a.by, at: a.at, kind: a.kind || null })) };
   });
 });
 
@@ -476,4 +503,41 @@ exports.booksPcoPullNow = onCall(async req => {
   await memberOf(req, orgId, CAN_ENTER);
   if (today != null && !ISO.test(today)) throw bad('today is a date like 2026-10-19');
   return pullPlanningCenter(orgId, today);
+});
+
+// ---------- People limited to part of the books ----------
+// Department data entry, campus admins and payroll administrators never read the whole ledger; this hands them their part:
+// whole entries that touch their budgets (payroll: payroll entries), with staff pay shown without names.
+exports.booksScopedBooks = onCall({ memory: '512MiB' }, async req => {
+  const { orgId } = req.data || {};
+  const who = await memberOf(req, orgId, ['entry', 'campus', 'payroll']);
+  const org = orgRef(orgId), setup = (await org.collection('settings').doc('setup').get()).data() || {};
+  const scope = scopeOf(who, setup);
+  if (!scope && who.role !== 'payroll') throw new HttpsError('failed-precondition', 'This sign-in reads the whole books the usual way');
+  const state = (await org.collection('ledger').doc('state').get()).data() || { seq: 0, lockedThrough: null };
+  const chart = Setup.buildChart(setup), pay = new Set(chart.filter(a => a.sub === 'payroll').map(a => a.code));
+  const entries = (await org.collection('entries').orderBy('seq').get()).docs.map(d => d.data())
+    .filter(e => who.role === 'payroll' ? payrollEntry(e) || e.lines.some(l => pay.has(l.account)) : e.lines.some(l => scope.has(l.project)))
+    .map(e => who.role === 'payroll' ? e : { ...e, lines: e.lines.map(l => pay.has(l.account) ? { ...l, party: null } : l), memo: e.lines.some(l => pay.has(l.account)) ? 'Staff pay' : e.memo });
+  const ws = {};
+  if (scope) for (const kind of ['bills', 'checks', 'requests']) {
+    const d = await org.collection('workspace').doc(kind).get(), list = d.exists ? JSON.parse(d.data().json || '[]') : [];
+    ws[kind] = list.filter(x => [x.proj, ...(x.splits || []).map(p => p.proj)].some(p => scope.has(p)));
+  }
+  return { setup, state: { seq: state.seq || 0, lockedThrough: state.lockedThrough || null }, entries, workspace: ws, scope: scope ? [...scope] : null };
+});
+
+// ---------- Approving the pay plan ----------
+// The payroll administrator proposes next year's pay (in private/payroll); an admin who didn't prepare it approves it, and the
+// server keeps that approved copy (payPlans/{year}) where nobody can change it.
+exports.booksApprovePayPlan = onCall(async req => {
+  const { orgId } = req.data || {};
+  const who = await memberOf(req, orgId, CAN_ADMIN);
+  const org = orgRef(orgId), d = await org.collection('private').doc('payroll').get();
+  const plan = d.exists ? (JSON.parse(d.data().json || '{}').compPlan || null) : null;
+  if (!plan || !plan.year) throw new HttpsError('failed-precondition', 'There\'s no pay plan to approve');
+  if (plan.submitted && plan.submitted.by === who.personId) throw new HttpsError('permission-denied', 'Someone other than the person who prepared it has to approve it');
+  await org.collection('payPlans').doc(String(plan.year)).set({ plan: JSON.stringify(plan), approvedBy: who.personId || who.uid, approvedAt: now() });
+  await org.collection('audit').add({ at: now(), by: who.name || who.uid, uid: who.uid, action: 'approve_pay_plan', year: plan.year });
+  return { year: plan.year, approvedBy: who.personId };
 });

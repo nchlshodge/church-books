@@ -69,6 +69,8 @@
     fin:    { name: 'Finance team', role: 'Treasurer + bookkeeper', phone: '', email: 'finance@example.org', group: true },
     nick:   { name: 'Nick Hodge', role: 'Admin', phone: '', email: 'nick@rochesterchristian.church' },
     pat:    { name: 'Pat Ellis', role: 'Treasurer', phone: '', email: 'pat.ellis@example.org' },
+    jordan: { name: 'Jordan Lee', role: 'Oxford campus pastor', phone: '(248) 555-0186', email: 'jordan.lee@example.org', payBack: { method: 'ACH', last4: '7731' } },
+    renee:  { name: 'Renee Ortiz', role: 'HR & payroll', phone: '', email: 'renee.ortiz@example.org' },
   },
   admins: ['nick'],              // can change these settings
   currentUser: 'nick',
@@ -85,6 +87,9 @@
   ],
 
   // Spending categories people pick from → the account they post to.
+  // Campuses: a campus admin sees and approves everything for their campus's budgets (and the projects inside them)
+  campuses: [{ id: 'oxford', name: 'Oxford campus', budgets: ['Oxford campus'], admin: 'jordan' }],
+
   categories: {
     'Ministry supplies': '5100', 'Event supplies': '5110', 'Retreat deposit': '5110', 'Hospitality': '5120', 'Meals': '5120',
     'Utilities': '5200', 'Fire inspection': '5240', 'Repairs': '5210', 'Building supplies': '5220', 'Office supplies': '5300', 'Software': '5310',
@@ -129,6 +134,9 @@
     { name: 'Youth Ministry', fund: 'gen', lead: 'sam', budget: 12000 },
     { name: 'Youth Retreat', fund: 'gen', lead: 'sam', budget: 4200, date: 'Nov 14–16', parent: 'Youth Ministry' },
     { name: 'Young adults', fund: 'gen', lead: 'sam', budget: 4000 },
+    // The Oxford campus runs its own ministry budget (see campuses below)
+    { name: 'Oxford campus', fund: 'gen', lead: 'jordan', budget: 36000 },
+    { name: 'Oxford kids & youth', fund: 'gen', lead: 'jordan', budget: 6000, parent: 'Oxford campus' },
     { name: 'Guest speakers', fund: 'gen', lead: 'fin', budget: 20000 },
     { name: 'AG missionary support', fund: 'mis', lead: 'fin', budget: 270000 },
     { name: 'Other missions support', fund: 'mis', lead: 'fin', budget: 180000 },
@@ -164,6 +172,7 @@
     depositBank: '1000',          // where giving payouts and cash deposits land
     feeFund: 'gen',               // processing fees come out of here, so designated gifts stay whole
     reviewers: ['nick'],          // who reviews receipts
+    payrollAdmin: 'renee',        // proposes staff pay changes; an admin approves them
     approvers: ['nick', 'pat'],   // who can approve spending; bigger amounts need two of them
     approvalTiers: [
       { upTo: 500, approvals: 1 },

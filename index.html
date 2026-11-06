@@ -473,7 +473,7 @@ const PROJECTS = copy(SETUP.budgets);
 // The parent's budget includes its projects; their spending rolls up into it.
 const kids = p => PROJECTS.filter(x => x.parent === p.name);
 const projLabel = p => (p.parent ? p.parent + ' › ' : '') + p.name;
-const projOptions = sel => FUNDS.map(f => { const top = PROJECTS.filter(p => p.fund === f.id && !p.parent); return top.length ? `<optgroup label="${esc(f.name)}">${top.map(p => [p, ...kids(p)]).flat().map(p => `<option value="${esc(p.name)}" ${p.name === sel ? 'selected' : ''}>${p.parent ? '\u00a0\u00a0\u00a0↳ ' : ''}${esc(p.name)}</option>`).join('')}</optgroup>` : ''; }).join('');
+const projOptions = sel => FUNDS.map(f => { const sc = typeof myScope === 'function' && myScope(), top = PROJECTS.filter(p => p.fund === f.id && !p.parent && (!sc || sc.has(p.name))); return top.length ? `<optgroup label="${esc(f.name)}">${top.map(p => [p, ...kids(p)]).flat().map(p => `<option value="${esc(p.name)}" ${p.name === sel ? 'selected' : ''}>${p.parent ? '\u00a0\u00a0\u00a0↳ ' : ''}${esc(p.name)}</option>`).join('')}</optgroup>` : ''; }).join('');
 const TODAY = SAMPLE.today, YEAR = TODAY.slice(0, 4);
 const PRODUCT = 'Fundwell';   // the product's name — a placeholder until the name is settled
 const APP = `${SETUP.shortName} ${SETUP.appName || PRODUCT}`;
@@ -581,7 +581,7 @@ const countByFund = c => { const e = countEntry(c), m = {}; (e ? e.lines : []).f
 const daysSince = d => Math.round((Date.parse(TODAY) - Date.parse(iso(d))) / 86400000);
 // Checks. A queued check has no number yet — it gets the next number when it prints, because
 // that's the order the stock comes off the printer. Statuses:
-//   Needs 2nd signer → Ready to print → Outstanding (printed, in the mail) → Cleared · or Void
+//   (a hand-written check: Needs approval →) Needs 2nd signer → Ready to print → Outstanding (printed, in the mail) → Cleared · or Void
 const CK = SETUP.checks ? copy(SETUP.checks) : { stock: 'preprinted', bank: BANK, nextNumber: 1001, signers: POL.reviewers, offsetX: 0, offsetY: 0 };
 CHECKS.forEach(c => { c.id = c.id || 'k' + c.no; if (c.no && c.ppSent === undefined) c.ppSent = true; });   // checks from before were already on the bank's list
 let nextNo = Math.max(CK.nextNumber || 1, ...CHECKS.map(c => (c.no || 0) + 1));
@@ -599,30 +599,39 @@ const lastRecon = acct => RECONS.filter(r => r.account === acct).sort((a, b) => 
 const AP = BooksApprovals;
 POL.approvers = POL.approvers || REVIEWERS;
 const restrictedOf = x => parts(x).some(p => fund(project(p.proj).fund).restriction === 'with');
-const planOf = x => AP.planFor(POL, { amount: x.amt, restricted: restrictedOf(x) });
-const apStatus = (x, submitter) => AP.status(POL, planOf(x), x.approvals || [], { submitter });
+// The department the money is for, and who heads it (the lead of its budget, or of the ministry it sits inside)
+const deptProj = x => { const pr = (parts(x)[0] || {}).proj || x.proj, b = pr && PROJECTS.find(y => y.name === pr); return b ? (b.parent ? project(b.parent) : b) : null; };
+const deptOf = x => { const b = deptProj(x), lead = b && b.lead; return lead && PEOPLE[lead] && !PEOPLE[lead].group ? lead : null; };
+// A campus admin approves spending for their campus's budgets, as one of the finance approvals
+const campusFor = x => { const pr = (parts(x)[0] || {}).proj || x.proj, b = pr && PROJECTS.find(y => y.name === pr), top = b && (b.parent ? b.parent : b.name);
+  return (SETUP.campuses || []).find(c => c.admin && (c.budgets || []).includes(top)) || null; };
+const polFor = x => { const c = campusFor(x); return c && !POL.approvers.includes(c.admin) ? { ...POL, approvers: [...POL.approvers, c.admin] } : POL; };
+const planOf = x => AP.planFor(polFor(x), { amount: x.amt, restricted: restrictedOf(x), dept: deptOf(x) });
+const apStatus = (x, submitter) => AP.status(polFor(x), planOf(x), x.approvals || [], { submitter });
 const tierLabel = (t, i, tiers) => { const lo = i ? tiers[i - 1].upTo : 0; return t.upTo == null ? `Over ${fmt(lo, 0)}` : lo ? `${fmt(lo, 0)}–${fmt(t.upTo, 0)}` : `Up to ${fmt(t.upTo, 0)}`; };
 function approvalBox(x, submitter) {
   const plan = planOf(x), st = apStatus(x, submitter), tiers = POL.approvalTiers || [], ti = tiers.indexOf(plan.tier);
   const pick = st.canStill.includes(SETUP.currentUser) ? SETUP.currentUser : st.canStill[0];
   return `<div class="section apbox"><div class="card-head" style="margin-bottom:6px"><h3 style="margin:0">Approvals · ${st.have} of ${st.need}${plan.board ? ' + board vote' : ''}</h3>${st.done ? '<span class="pill green">Approved</span>' : ''}</div>
     <div class="muted small" style="margin-bottom:8px">${ti >= 0 ? tierLabel(plan.tier, ti, tiers) : 'Any amount'}: ${plan.tier.approvals} approval${plan.tier.approvals > 1 ? 's' : ''}${plan.board ? ' and a board vote' : ''}${plan.restricted && plan.approvals > plan.tier.approvals ? ` · ${plan.approvals} because it's money given for a purpose` : ''}${submitter && PEOPLE[submitter] ? ` · ${esc(PEOPLE[submitter].name.split(' ')[0])} can't approve their own` : ''}</div>
-    ${(x.approvals || []).map(a => `<div class="chk done"><span class="box">✓</span><span>${a.kind === 'board' ? `Board approved ${esc(a.on)}${a.note ? ' · ' + esc(a.note) : ''}` : `${esc(PEOPLE[a.by].name)} · ${esc(a.on)}`}</span></div>`).join('')}
+    ${st.deptNeeded ? `<div class="chk ${st.deptOk ? 'done' : ''}"><span class="box">${st.deptOk ? '✓' : '1'}</span><span>${st.deptOk ? '' : 'First: '}${esc((PEOPLE[st.dept] || {}).name || st.dept)}, head of ${esc((deptProj(x) || {}).name || 'the department')}${st.deptOk ? ' · said yes' : ' — says yes before finance approves'}</span></div>` : ''}
+    ${(x.approvals || []).filter(a => a.kind !== 'dept').map(a => `<div class="chk done"><span class="box">✓</span><span>${a.kind === 'board' ? `Board approved ${esc(a.on)}${a.note ? ' · ' + esc(a.note) : ''}` : `${esc(PEOPLE[a.by].name)} · ${esc(a.on)}`}</span></div>`).join('')}
     ${window.CLOUD && !st.done && st.have < st.need ? (st.canStill.includes(SETUP.currentUser) ? `<div class="muted small" style="margin-top:8px">You're approving as ${esc(PEOPLE[SETUP.currentUser].name)}. The server records it and checks the rules.</div>` : `<div class="note gold" style="margin-top:8px">You can't approve this one${submitter === SETUP.currentUser ? ' — it\'s your own spending' : ' — you\'re not one of the approvers'}. Another approver signs in to approve it.</div>`) : ''}
-    ${!window.CLOUD && !st.done && st.have < st.need && st.canStill.length ? `<div class="f" style="margin:10px 0 0"><label>Approving now</label><select id="apWho">${st.canStill.map(id => `<option value="${id}" ${id === pick ? 'selected' : ''}>${esc(PEOPLE[id].name)}</option>`).join('')}</select><span class="help">In the hosted version each approver signs in and approves for themselves.</span></div>` : ''}
+    ${!window.CLOUD && !st.done && ((st.deptNeeded && !st.deptOk) || (st.have < st.need && st.canStill.length)) ? `<div class="f" style="margin:10px 0 0"><label>Approving now</label><select id="apWho">${st.deptNeeded && !st.deptOk ? `<option value="${st.dept}" selected>${esc(PEOPLE[st.dept].name)} (department head)</option>` : st.canStill.map(id => `<option value="${id}" ${id === pick ? 'selected' : ''}>${esc(PEOPLE[id].name)}</option>`).join('')}</select><span class="help">In the hosted version each approver signs in and approves for themselves.</span></div>` : ''}
     ${plan.board && !st.boardOk ? `<div class="row2" style="margin-top:10px"><div class="f"><label>Board approved on</label><input id="apBoardOn" type="date"></div><div class="f"><label>Where it's written down</label><input id="apBoardNote" placeholder="e.g. Oct 12 minutes, item 4"></div></div>` : ''}
     ${st.stuck ? `<div class="note" style="background:var(--red-soft);color:var(--red-ink);margin-top:8px">This needs ${st.need} approvers who didn't spend it, and there aren't enough set up. Add one in Spending → Approval rules.</div>` : ''}</div>`;
 }
 // Adds this person's approval (and a board vote if entered). Returns the new status.
 // kind: 'expense' | 'bill' — in the cloud version those approvals are recorded (and checked) by the server
 function addApproval(x, submitter, kind) {
-  const cloud = window.CLOUD && kind, who = cloud ? (apStatus(x, submitter).canStill.includes(SETUP.currentUser) ? SETUP.currentUser : null) : ($('#apWho') ? $('#apWho').value : null);
+  const st0 = apStatus(x, submitter), deptStep = st0.deptNeeded && !st0.deptOk;
+  const cloud = window.CLOUD && kind, who = cloud ? (deptStep ? (SETUP.currentUser === st0.dept ? SETUP.currentUser : null) : st0.canStill.includes(SETUP.currentUser) ? SETUP.currentUser : null) : ($('#apWho') ? $('#apWho').value : null);
   x.approvals = x.approvals || [];
-  if (who) x.approvals.push({ by: who, on: short(D) });
+  if (who) x.approvals.push(deptStep && who === st0.dept ? { by: who, on: short(D), kind: 'dept' } : { by: who, on: short(D) });
   const on = $('#apBoardOn') && $('#apBoardOn').value, note = $('#apBoardNote') && $('#apBoardNote').value.replace(/[<>&"]/g, '').trim();
   const board = on ? { kind: 'board', on: new Date(on + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }), note } : null;
   if (board) x.approvals.push(board);
-  if (cloud && (who || board)) Cloud.call('booksApprove', { kind, id: x.id, amount: x.amt, restricted: restrictedOf(x), submitter, ...(board ? { board: { on: board.on, note } } : {}) }, 'approving');
+  if (cloud && (who || board)) Cloud.call('booksApprove', { kind, id: x.id, amount: x.amt, restricted: restrictedOf(x), submitter, budget: (deptProj(x) || {}).name || null, ...(board ? { board: { on: board.on, note } } : {}) }, 'approving');
   return apStatus(x, submitter);
 }
 // Book something that needed approval, telling the server which approval it relies on
@@ -680,7 +689,7 @@ const I = {
   chart: '<path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/>',
 };
 const NAV = [
-  { h: null, items: [{ k: 'home', l: 'Overview', i: 'home' }, { k: 'mydept', l: 'My department', i: 'chart', show: () => myRole() === 'leader' }, { k: 'snap', l: 'Send a receipt', i: 'out', show: () => ['leader', 'entry'].includes(myRole()) }] },
+  { h: null, items: [{ k: 'home', l: 'Overview', i: 'home' }, { k: 'mydept', l: 'My department', i: 'chart', show: () => !!rolePages() && rolePages().includes('mydept') }, { k: 'snap', l: 'Send a receipt', i: 'out', show: () => ['leader', 'entry', 'campus'].includes(myRole()) }] },
   { h: 'Money in', items: [{ k: 'giving', l: 'Giving & deposits', i: 'in', badge: () => lookCount() + (isReviewer() ? unsignedWeeks().length : 0) }, { k: 'commit', l: 'Commitments', i: 'chart', show: () => campaigns().length > 0 }, { k: 'pledges', l: 'Pledges', i: 'chart', show: () => PCAMPS.length > 0 }, { k: 'pushes', l: 'Giving pushes', i: 'spark', show: () => PUSHES.length > 0 || PARTNERS.length > 0 }, { k: 'rentals', l: 'Building rentals', i: 'key', badge: () => RENTALS.filter(r => rIssues(r).some(t => !/business/i.test(t))).length }, { k: 'donors', l: 'Donors & gifts', i: 'heart', badge: () => ncTodo().filter(g => { const s = ncNext(g); return s.due && s.due < TODAY; }).length }] },
   { h: 'Money out', items: [
     { k: 'expenses', l: 'Spending & receipts', i: 'out', badge: () => EXPENSES.filter(e => !e.receipt).length + REQUESTS.filter(r => r.status === 'Waiting').length },
@@ -919,7 +928,7 @@ function regCard() {
     <div class="muted small" style="margin-top:10px">${REG.events.filter(e => e.proj).map(e => `${esc(e.name)}: ${e.signups} signed up → ${esc(e.proj)}`).join(' · ')}</div></div>`;
 }
 function requestsCard() {
-  const waiting = REQUESTS.filter(r => r.status === 'Waiting'), approved = REQUESTS.filter(r => r.status === 'Approved');
+  const waiting = vis(REQUESTS).filter(r => r.status === 'Waiting'), approved = vis(REQUESTS).filter(r => r.status === 'Approved');
   if (!waiting.length && !approved.length) return '';
   const row = r => { const st = apStatus(r, r.who), p = project(r.proj); return `<div class="owe"><div class="owe-h">${avatar(r.who)}<div class="nm"><b>${esc(r.what)}</b><small>${esc(PEOPLE[r.who].name)} · ${esc(r.proj)} · asked ${r.asked}${r.needBy ? ' · needed by ' + esc(r.needBy) : ''}</small></div>
       <span class="num"><b>${fmt(r.amt)}</b></span>${r.status === 'Waiting' ? `<button class="btn small primary" data-req="${r.id}">Review</button>` : `<span class="pill green">Approved</span>`}</div>
@@ -952,9 +961,9 @@ function inboxCard() {
 
 let expFilter = 'All';
 V.expenses = () => {
-  const list = EXPENSES.filter(e => expFilter === 'All' || e.status === expFilter);
-  const inStage = s => EXPENSES.filter(e => e.status === s);
-  const owed = EXPENSES.filter(e => !e.receipt);
+  const list = vis(EXPENSES).filter(e => expFilter === 'All' || e.status === expFilter);
+  const inStage = s => vis(EXPENSES).filter(e => e.status === s);
+  const owed = vis(EXPENSES).filter(e => !e.receipt);
   const byPerson = {};
   owed.forEach(e => (byPerson[e.who] = byPerson[e.who] || []).push(e));
   const people = Object.entries(byPerson).sort((a, b) => Math.max(...b[1].map(e => e.days)) - Math.max(...a[1].map(e => e.days)));
@@ -1203,18 +1212,18 @@ V.bank = () => {
 };
 
 V.checks = () => {
-  const queue = CHECKS.filter(c => c.status === 'Ready to print'), cosign = CHECKS.filter(c => c.status === 'Needs 2nd signer');
-  const pp = CHECKS.filter(c => c.no && ((c.status === 'Outstanding' && !c.ppSent) || (c.status === 'Void' && c.ppSent && !c.ppVoidSent)));
-  const reg = CHECKS.filter(c => c.no).sort((a, b) => b.no - a.no);
+  const queue = vis(CHECKS).filter(c => c.status === 'Ready to print'), cosign = vis(CHECKS).filter(c => c.status === 'Needs 2nd signer'), needAp = vis(CHECKS).filter(c => c.status === 'Needs approval');
+  const pp = vis(CHECKS).filter(c => c.no && ((c.status === 'Outstanding' && !c.ppSent) || (c.status === 'Void' && c.ppSent && !c.ppVoidSent)));
+  const reg = vis(CHECKS).filter(c => c.no).sort((a, b) => b.no - a.no);
   return `
   <div class="vhead"><div><h1>Checks</h1><p>Every check — for a bill, paying someone back, or written by hand — waits in the queue, prints in a batch, and only counts as paid once you confirm it printed.</p></div>
     <div class="acts"><button class="btn" data-open="checksettings">Check settings</button><button class="btn primary" data-open="check">Write a check</button></div></div>
   ${pp.length ? `<div class="note mb" style="display:flex;gap:12px;align-items:center;flex-wrap:wrap"><span style="flex:1">🛡 <b>Positive pay:</b> ${pp.length} check${pp.length > 1 ? 's' : ''} not sent to ${esc(ckBank().bankName || 'the bank')} yet. The bank only pays checks on this list, so a forged or altered check gets stopped.</span><button class="btn small primary" data-ppay>Download positive pay file</button></div>` : ''}
   <div class="card mb"><div class="card-head"><div><h2>Print queue</h2><div class="muted small" style="margin-top:2px">${CK.stock === 'blank' ? 'Blank check stock · the MICR bank line prints too' : 'Pre-printed checks · only payee, date and amount print'} · next number #${nextNo}</div></div>
       ${queue.length ? `<button class="btn primary" data-printsel>Print ${queue.length > 1 ? 'selected' : ''}</button>` : ''}</div>
-    ${[...cosign, ...queue].map(c => `<div class="fund">${c.status === 'Ready to print' ? `<input type="checkbox" data-qsel="${c.id}" checked style="width:18px;height:18px;accent-color:var(--blue)">` : '<span style="width:18px"></span>'}
+    ${[...needAp, ...cosign, ...queue].map(c => `<div class="fund">${c.status === 'Ready to print' ? `<input type="checkbox" data-qsel="${c.id}" checked style="width:18px;height:18px;accent-color:var(--blue)">` : '<span style="width:18px"></span>'}
       <div class="nm">${esc(c.payee)}<small>${esc(c.memo || '')}${c.cosign ? ` · 2nd signer: ${esc(c.cosign)}` : ''}</small></div><div class="num"><b>${fmt(c.amt)}</b></div>
-      ${c.status === 'Needs 2nd signer' ? `<button class="btn small soft" data-cosign="${c.id}">Approve as 2nd signer</button>` : `<span class="pill blue">Ready</span>`}
+      ${c.status === 'Needs approval' ? `<button class="btn small soft" data-ckapprove="${c.id}">Approve</button>` : c.status === 'Needs 2nd signer' ? `<button class="btn small soft" data-cosign="${c.id}">Approve as 2nd signer</button>` : `<span class="pill blue">Ready</span>`}
       <button class="linkbtn" data-voidck="${c.id}" style="margin-left:8px">Cancel</button></div>`).join('') || '<div class="empty" style="padding:24px"><b>Nothing to print</b>Pay a bill or someone back by check, or write one.</div>'}
     ${cosign.length ? `<div class="muted small" style="margin-top:8px">Checks over ${fmt(POL.secondSignerOver, 0)} need a second person to approve before they print, and two signatures on paper.</div>` : ''}</div>
   <div class="card"><div class="card-head"><h2>Check register</h2><span class="muted small">Every number is accounted for — printed, cleared or void</span></div><div class="tablewrap"><table class="t">
@@ -1230,8 +1239,8 @@ function finishCheck(c, no) {
   let je;
   if (c.bill) { const b = BILLS.find(x => x.id === c.bill); je = payBill(b, { method: 'Check', checkNo: no }); Object.assign(b, { status: 'Paid', paidOn: short(D), method: `Check #${no}` }); }
   else if (c.reimb) { const items = EXPENSES.filter(e => e.checkId === c.id); items.forEach(e => { e.reimb = 'To pay'; }); je = payBack(c.reimb, { method: 'Check', checkNo: no }, items); }
-  else je = BOOKS.post(R.bankPayment({ date: TODAY, party: c.payee, memo: `Check #${no} · ${c.payee}${c.memo ? ' · ' + c.memo : ''}`, source: { type: 'check', id: String(no) },
-    amount: cents(c.amt), expense: EXPENSE_ACCT[c.category] || '5100', fund: c.fund || OP, project: c.proj, bank: CK.bank }), ME);
+  else je = withApproval('check', c.id, () => BOOKS.post(R.bankPayment({ date: TODAY, party: c.payee, memo: `Check #${no} · ${c.payee}${c.memo ? ' · ' + c.memo : ''}`, source: { type: 'check', id: String(no) },
+    amount: cents(c.amt), expense: EXPENSE_ACCT[c.category] || '5100', fund: c.fund || OP, project: c.proj, bank: CK.bank }), ME));
   c.je = je.id; c.status = 'Outstanding';
 }
 // Void: a printed check's payment is reversed and whatever it paid is open again (so it can be reissued);
@@ -1379,9 +1388,9 @@ function w9Pill(v) {
   return ({ 'On file': `<span class="pill green">W-9 on file</span>`, Requested: `<span class="pill gold">W-9 requested ${v.w9Date || ''}</span>`, Missing: `<span class="pill red">W-9 missing</span>` })[v.w9] || `<span class="pill red">W-9 missing</span>`;
 }
 V.bills = () => {
-  const open = BILLS.filter(b => b.status !== 'Paid' && b.status !== 'To approve');
+  const open = vis(BILLS).filter(b => b.status !== 'Paid' && b.status !== 'To approve');
   const late = open.filter(b => daysTo(b.due) < 0), soon = open.filter(b => daysTo(b.due) >= 0 && daysTo(b.due) <= 7);
-  const toApprove = BILLS.filter(b => b.status === 'To approve');
+  const toApprove = vis(BILLS).filter(b => b.status === 'To approve');
   const owed = BOOKS.natural('2100') / 100;
   const paidYTD = v => (0 - BOOKS.balance({ account: BANK, party: v.name })) / 100;
   return `
@@ -1396,7 +1405,7 @@ V.bills = () => {
   <div class="seg"><button class="${billsTab === 'bills' ? 'active' : ''}" data-billtab="bills">Bills</button><button class="${billsTab === 'vendors' ? 'active' : ''}" data-billtab="vendors">Vendors ${VENDORS.some(v => needs1099(v) && v.w9 !== 'On file') ? `<span class="badge-dot"></span>` : ''}</button><button class="${billsTab === 'recurring' ? 'active' : ''}" data-billtab="recurring">Recurring ${manualDue().length ? '<span class="badge-dot"></span>' : ''}</button><button class="${billsTab === '1099' ? 'active' : ''}" data-billtab="1099">1099s</button></div>
   ${billsTab === 'recurring' ? recurringTab() : billsTab === '1099' ? ten99Tab() : billsTab === 'bills' ? `<div class="card"><div class="tablewrap"><table class="t">
     <thead><tr><th>Vendor</th><th>Due</th><th>Budget</th><th class="r">Amount</th><th class="r">Next step</th></tr></thead>
-    <tbody>${BILLS.slice().sort((a, b) => (a.status === 'Paid') - (b.status === 'Paid') || daysTo(a.due) - daysTo(b.due)).map(b => { const v = vendor(b.vendor); return `<tr>
+    <tbody>${vis(BILLS).slice().sort((a, b) => (a.status === 'Paid') - (b.status === 'Paid') || daysTo(a.due) - daysTo(b.due)).map(b => { const v = vendor(b.vendor); return `<tr>
       <td class="who">${esc(v.name)}<small>${esc(b.number)}${b.note ? ' · ' + esc(b.note) : ''}${b.file ? ' · 📎' : ''}</small>${needs1099(v) && v.w9 !== 'On file' && b.status !== 'Paid' ? '<div style="margin-top:4px"><span class="pill red">Needs a W-9 before paying</span></div>' : ''}</td>
       <td>${dueText(b)}</td>
       <td>${parts(b).map(p => `<span class="pill blue">${esc(p.proj)}</span>`).join(' ')}<div class="muted small" style="margin-top:3px">${andList([...new Set(parts(b).map(p => fund(project(p.proj).fund).name))])}</div></td>
@@ -1650,9 +1659,15 @@ P.expense = () => ({
   },
 });
 
+P.ckapprove = id => { const c = CHECKS.find(x => x.id === id);
+  return { kicker: 'Check to approve', body: `<h2>${esc(c.payee)} · ${fmt(c.amt)}</h2><p class="lead">${esc(c.proj)} · ${esc(c.category || '')}${c.memo ? ' · ' + esc(c.memo) : ''} · written by ${esc((PEOPLE[c.by] || {}).name || c.createdBy || '')}</p>${approvalBox(c, c.by)}`,
+    actions: `<button class="btn" data-close>Close</button><button class="btn primary" id="ckApGo">Approve</button>`,
+    init() { $('#ckApGo').onclick = () => { const st = addApproval(c, c.by, 'check'); if (st.done) c.status = needs2nd(c.amt) ? 'Needs 2nd signer' : 'Ready to print';
+      closePanel(); render(); toast(st.done ? (c.status === 'Ready to print' ? 'Approved · ready to print' : 'Approved · needs a second signer') : `Approval recorded · ${st.deptNeeded && !st.deptOk ? 'the department head still needs to say yes' : `${st.have} of ${st.need}`}`); }; } };
+};
 P.check = () => ({
   kicker: 'Checks',
-  body: `<h2>Write a check</h2><p class="lead">For anything that isn't a bill or a reimbursement. It goes in the print queue${POL.secondSignerOver ? `; over ${fmt(POL.secondSignerOver, 0)} it needs a second signer first` : ''}.</p>
+  body: `<h2>Write a check</h2><p class="lead">For anything that isn't a bill or a reimbursement. It's approved like any other spending (by someone other than you), then goes in the print queue${POL.secondSignerOver ? `; over ${fmt(POL.secondSignerOver, 0)} it also needs a second signer` : ''}.</p>
     <div class="row2"><div class="f"><label>Pay to</label><input id="ckPayee" placeholder="Payee"></div><div class="f"><label>Amount</label><input id="ckAmt" type="number" step=".01"></div></div>
     <div class="f"><label>Mailing address (optional)</label><textarea id="ckAddr" rows="2" placeholder="Shows through a window envelope"></textarea></div>
     <div class="row2"><div class="f"><label>Budget</label><select id="ckProj">${projOptions(PROJECTS[0].name)}</select></div><div class="f"><label>Category</label><select id="ckCat">${CATS().map(c => `<option>${esc(c)}</option>`).join('')}</select></div></div>
@@ -1662,8 +1677,9 @@ P.check = () => ({
     $('#ckAdd').onclick = () => {
       const clean = v => v.replace(/[<>&"]/g, '').trim(), payee = clean($('#ckPayee').value), amt = Math.round(+$('#ckAmt').value * 100) / 100;
       if (!payee || !(amt > 0)) { toast('Add a payee and an amount'); return; }
-      const proj = $('#ckProj').value, c = queueCheck({ payee, amt, address: clean($('#ckAddr').value), memo: clean($('#ckMemo').value), proj, fund: project(proj).fund, category: $('#ckCat').value });
-      closePanel(); render(); toast(c.status === 'Needs 2nd signer' ? 'Queued · needs a second signer' : 'Added to the print queue');
+      const proj = $('#ckProj').value, c = queueCheck({ payee, amt, address: clean($('#ckAddr').value), memo: clean($('#ckMemo').value), proj, fund: project(proj).fund, category: $('#ckCat').value,
+        standalone: true, by: myPerson(), approvals: [], status: 'Needs approval' });   // a check that isn't paying an approved bill or receipt is approved like spending
+      closePanel(); render(); toast('Queued · waiting for approval');
     };
   },
 });
@@ -2318,19 +2334,47 @@ let VIEW_AS = null;
 const myRole = () => window.CLOUD ? CLOUD.role : (VIEW_AS ? VIEW_AS.role : 'owner');
 const myPerson = () => (!window.CLOUD && VIEW_AS && VIEW_AS.person) || SETUP.currentUser;
 const isAdmin = () => ['owner', 'admin'].includes(myRole()) && (SETUP.admins || [SETUP.currentUser]).includes(SETUP.currentUser);
-// Pages each limited role can open; every other role sees every page
-const ROLE_PAGES = { entry: ['home', 'giving', 'expenses', 'snap', 'cards', 'bills', 'checks', 'bank', 'import', 'partners', 'rentals', 'files',
-  'reports', 'report', 'board', 'budgets', 'funds', 'cash', 'books'], leader: ['mydept', 'report', 'snap'] };   // data entry also pulls reports; never settings, salaries or donors
-const canOpen = k => !ROLE_PAGES[myRole()] || ROLE_PAGES[myRole()].includes(k);
-const seesTotals = () => myRole() !== 'leader';
-// A department head's budgets: the ones they lead (a project inside one of them comes with it)
-const myBudgets = () => { const p = myPerson(), led = PROJECTS.filter(x => x.lead === p); return led.filter(x => !x.parent || !led.some(y => y.name === x.parent)); };
+// Limits on a sign-in: budgets (data entry for certain departments), campus (a campus admin), reports (data entry may pull
+// reports — yes unless turned off). In the cloud they come from the person's membership; in the mockup from "Viewing as".
+const myLimits = () => window.CLOUD ? { budgets: CLOUD.budgets || [], campus: CLOUD.campus || null, reports: CLOUD.reports !== false } : { budgets: [], campus: null, reports: true, ...(VIEW_AS || {}) };
+const campusOf = id => (SETUP.campuses || []).find(c => c.id === id) || null;
+// The budgets someone is limited to, with the projects inside them; null = no limit
+function myScope() {
+  const role = myRole(), lim = myLimits();
+  const names = role === 'campus' ? ((campusOf(lim.campus) || {}).budgets || []) : role === 'entry' ? lim.budgets || [] : [];
+  if (!names.length && role !== 'campus') return null;
+  return new Set(names.flatMap(n => [n, ...PROJECTS.filter(p => p.parent === n).map(p => p.name)]));
+}
+const inScope = x => { const sc = myScope(); return !sc || parts(x).some(p => sc.has(p.proj)); };
+const vis = arr => myScope() ? arr.filter(inScope) : arr;
+// Pages each limited role can open; every other role (owner, admin, bookkeeper, reviewer, viewer) sees every page
+const REPORT_PAGES = ['reports', 'report', 'board', 'budgets', 'funds', 'cash', 'books'];
+function rolePages() {
+  const role = myRole(), lim = myLimits();
+  if (role === 'leader') return ['mydept', 'report', 'snap'];
+  if (role === 'campus') return ['mydept', 'report', 'expenses', 'snap', 'bills', 'checks', 'files'];
+  if (role === 'payroll') return ['payroll', 'staffpay'];
+  if (role === 'entry' && myScope()) return ['home', 'expenses', 'snap', 'bills', 'checks', 'files', ...(lim.reports ? ['mydept', 'report'] : [])];
+  if (role === 'entry') return ['home', 'giving', 'expenses', 'snap', 'cards', 'bills', 'checks', 'bank', 'import', 'partners', 'rentals', 'files', ...(lim.reports ? REPORT_PAGES : [])];
+  return null;
+}
+const canOpen = k => !rolePages() || rolePages().includes(k);
+const seesTotals = () => !['leader', 'campus'].includes(myRole()) && !(myRole() === 'entry' && myScope());
+// The budgets on someone's "My department" page: their limits (department data entry, campus admin), else the ones they lead
+const myBudgets = () => { const sc = myScope(); if (sc) return PROJECTS.filter(x => sc.has(x.name) && !(x.parent && sc.has(x.parent)));
+  const p = myPerson(), led = PROJECTS.filter(x => x.lead === p); return led.filter(x => !x.parent || !led.some(y => y.name === x.parent)); };
 const myBudgetNames = () => myBudgets().flatMap(b => [b.name, ...kids(b).map(k => k.name)]);
-const VIEW_AS_CHOICES = () => [['owner|' + SETUP.currentUser, `Admin — ${(PEOPLE[SETUP.currentUser] || {}).name || 'owner'}`],
-  ...Object.entries(PEOPLE).filter(([id, p]) => !p.group && id !== SETUP.currentUser).flatMap(([id, p]) => [
-    PROJECTS.some(b => b.lead === id) ? [`leader|${id}`, `Department head — ${p.name}`] : null]).filter(Boolean),
-  ...Object.entries(PEOPLE).filter(([id, p]) => !p.group && id !== SETUP.currentUser).slice(0, 1).map(([id, p]) => [`entry|${id}`, `Data entry — ${p.name}`]),
-  ['viewer|' + ((POL.approvers || []).find(x => x !== SETUP.currentUser) || SETUP.currentUser), 'Board member (view only)']];
+// "Viewing as" choices: role|person|limits (limits: budgets separated by ~, or campus:<id>, and !reports)
+const VIEW_AS_CHOICES = () => { const others = Object.entries(PEOPLE).filter(([id, p]) => !p.group && id !== SETUP.currentUser), first = (others[0] || [SETUP.currentUser])[0];
+  const deptHeads = others.filter(([id]) => PROJECTS.some(b => b.lead === id && !b.parent)), youth = PROJECTS.find(b => /youth/i.test(b.name) && !b.parent), kidsB = PROJECTS.find(b => /kids/i.test(b.name) && !b.parent);
+  return [['owner|' + SETUP.currentUser, `Admin — ${(PEOPLE[SETUP.currentUser] || {}).name || 'owner'}`],
+    [`entry|${first}`, `Data entry, all departments — ${(PEOPLE[first] || {}).name}`],
+    [`entry|${first}|!reports`, `Data entry, numbers only (no reports) — ${(PEOPLE[first] || {}).name}`],
+    ...(youth ? [[`entry|${first}|${[youth, kidsB].filter(Boolean).map(b => b.name).join('~')}`, `Data entry for ${[youth, kidsB].filter(Boolean).map(b => b.name).join(' & ')} — ${(PEOPLE[first] || {}).name}`]] : []),
+    ...deptHeads.map(([id, p]) => [`leader|${id}`, `Department head — ${p.name}`]),
+    ...(SETUP.campuses || []).filter(c => c.admin).map(c => [`campus|${c.admin}|campus:${c.id}`, `Campus admin, ${c.name} — ${(PEOPLE[c.admin] || {}).name || c.admin}`]),
+    ...(POL.payrollAdmin ? [[`payroll|${POL.payrollAdmin}`, `Payroll administrator — ${(PEOPLE[POL.payrollAdmin] || {}).name || POL.payrollAdmin}`]] : []),
+    ['viewer|' + ((POL.approvers || []).find(x => x !== SETUP.currentUser) || SETUP.currentUser), 'Lead Pastor or board (view only)']]; };
 const SETUP_LOG = saved('setupLog', [{ v: 1, on: 'Jan 1, ' + YEAR, by: 'Setup', what: 'Church set up' }]);
 const logSetup = what => SETUP_LOG.push({ v: SETUP_LOG.length + 1, on: short(D) + ', ' + YEAR, by: ME, what });
 let setTab = 'church';
@@ -3281,7 +3325,7 @@ V.files = () => {
 P.billfiles = id => { const b = BILLS.find(x => x.id === id); return { kicker: 'Bill files', body: `<h2>${esc(vendor(b.vendor).name)} ${esc(b.number)} · ${fmt(b.amt)}</h2>${attachBox('bill', id, { role: 'invoice', title: 'Invoice and files', want: 'No invoice attached yet' })}`, actions: `<button class="btn" data-close>Done</button>` }; };
 
 // Cloud version: give someone a sign-in. They sign in with this email and land in these books with this role.
-const SIGNIN_ROLES = [['leader', 'Department head — sees only the budgets they lead: what was budgeted, came in, went out and is left'], ['entry', 'Data entry — records giving, deposits, receipts, bills and bank lines, and pulls reports; no settings, salaries or donors'], ['counter', 'Counter — counts the offering; a second counter confirms'], ['viewer', 'Viewer — elder or auditor: sees everything, changes nothing'],
+const SIGNIN_ROLES = [['campus', 'Campus admin — everything for one campus\'s budgets: enter, approve, report; no church-wide settings'], ['payroll', 'Payroll administrator — staff pay and payroll only; pay changes are approved by an admin'], ['leader', 'Department head — sees only the budgets they lead: what was budgeted, came in, went out and is left'], ['entry', 'Data entry — records giving, deposits, receipts, bills and bank lines, and pulls reports; no settings, salaries or donors'], ['counter', 'Counter — counts the offering; a second counter confirms'], ['viewer', 'Lead Pastor, board or auditor — sees everything, changes nothing'],
   ['reviewer', 'Reviewer — approves receipts and bills'], ['bookkeeper', 'Bookkeeper — records and pays'], ['admin', 'Admin — also changes the settings'], ['owner', 'Owner — also brings books in and sees private information']];
 const PRIVATE_KINDS = [['donors', 'Who gave what (donors and gifts of property)'], ['payroll', 'Salaries and pay'], ['medical', 'Medical reimbursements'], ['benevolence', 'Benevolence (who was helped)']];
 P.invite = () => ({
@@ -3291,17 +3335,21 @@ P.invite = () => ({
     <div class="f"><label>Email</label><input id="ivE" type="email"></div>
     <div class="f"><label>Role</label><select id="ivR">${SIGNIN_ROLES.map(([k, l]) => `<option value="${k}" ${k === 'viewer' ? 'selected' : ''}>${esc(l)}</option>`).join('')}</select></div>
     <div class="f" id="ivBW" style="display:none"><label>Budgets they can see</label><div style="display:grid;gap:4px">${PROJECTS.filter(p => !p.parent).map(p => `<label class="check"><input type="checkbox" data-ivb="${esc(p.name)}"> ${esc(p.name)}</label>`).join('')}</div><span class="help">Projects and events inside a budget come with it.</span></div>
+    <div class="f" id="ivCW" style="display:none"><label>Campus</label><select id="ivC">${(SETUP.campuses || []).map(c => `<option value="${esc(c.id)}">${esc(c.name)}</option>`).join('') || '<option value="">No campuses set up</option>'}</select></div>
+    <label class="check" id="ivRW" style="display:none;margin-bottom:10px"><input type="checkbox" id="ivRep" checked> Can pull reports</label>
     <div class="f"><label>Access ends (optional)</label><input id="ivU" type="date"><span class="help">For an auditor or a short-term helper. After this day they can't sign in to the books.</span></div>
     ${CLOUD.role === 'owner' ? `<div class="f"><label>Private information they may see</label><div style="display:grid;gap:4px">${PRIVATE_KINDS.map(([k, l]) => `<label class="check"><input type="checkbox" data-iva="${k}"> ${esc(l)}</label>`).join('')}</div><span class="help">Off unless you tick it. Only an owner can give this.</span></div>` : ''}`,
   actions: `<button class="btn" data-close>Cancel</button><button class="btn primary" id="ivGo">Send the invite</button>`,
   init() {
     const fill = () => { $('#ivE').value = PEOPLE[$('#ivP').value].email || ''; }; $('#ivP').onchange = fill; fill();
-    const roleSync = () => { $('#ivBW').style.display = $('#ivR').value === 'leader' ? '' : 'none'; }; $('#ivR').onchange = roleSync; roleSync();
+    const roleSync = () => { const r = $('#ivR').value; $('#ivBW').style.display = ['leader', 'entry'].includes(r) ? '' : 'none'; $('#ivCW').style.display = r === 'campus' ? '' : 'none'; $('#ivRW').style.display = r === 'entry' ? '' : 'none';
+      $('#ivBW label').textContent = r === 'entry' ? 'Limit to these departments (leave all unticked for every department)' : 'Budgets they can see'; }; $('#ivR').onchange = roleSync; roleSync();
     $('#ivGo').onclick = () => { const email = $('#ivE').value.trim(), role = $('#ivR').value, pid = $('#ivP').value;
       const budgets = [...document.querySelectorAll('[data-ivb]:checked')].map(x => x.dataset.ivb), access = [...document.querySelectorAll('[data-iva]:checked')].map(x => x.dataset.iva), until = $('#ivU').value || undefined;
       if (role === 'leader' && !budgets.length) { toast('Pick the budgets a ministry leader can see'); return; }
       $('#ivGo').disabled = true;
-      Cloud.invite(email, role, pid, { budgets, access, until }).then(() => { closePanel(); toast(`${PEOPLE[pid].name} can now sign in as ${role}`); }, err => { $('#ivGo').disabled = false; toast(err.message); }); };
+      if (role === 'campus' && !$('#ivC').value) { toast('Set up a campus first'); $('#ivGo').disabled = false; return; }
+      Cloud.invite(email, role, pid, { budgets, access, until, ...(role === 'campus' ? { campus: $('#ivC').value } : {}), ...(role === 'entry' ? { reports: $('#ivRep').checked } : {}) }).then(() => { closePanel(); toast(`${PEOPLE[pid].name} can now sign in as ${role}`); }, err => { $('#ivGo').disabled = false; toast(err.message); }); };
   },
 });
 /* ---------- Donors & gifts ----------
@@ -4054,7 +4102,7 @@ function rangeDates(k) {
 const reportNames = p => [p.name, ...kids(p).map(k => k.name)];
 function reportData(name, k) {
   const p = PROJECTS.find(x => x.name === name), names = reportNames(p), rd = rangeDates(k), r = BooksReports.projectReport(BOOKS, { projects: names, ...rd });
-  if (myRole() === 'leader') { const pay = new Set(BOOKS.accounts.filter(a => a.sub === 'payroll').map(a => a.code)); r.lines = r.lines.map(l => pay.has(l.account) ? { ...l, party: null, memo: 'Staff pay' } : l); }
+  if (!seesTotals()) { const pay = new Set(BOOKS.accounts.filter(a => a.sub === 'payroll').map(a => a.code)); r.lines = r.lines.map(l => pay.has(l.account) ? { ...l, party: null, memo: 'Staff pay' } : l); }
   const events = REG.events.filter(e => names.includes(e.proj)), people = events.reduce((t, e) => t + (e.signups || 0), 0);
   const missing = EXPENSES.filter(e => !e.receipt && parts(e).some(x => names.includes(x.proj)));
   return { p, names, r, rd, events, people, missing, held: names.reduce((t, n) => t + cents(held(project(n))), 0), subsYear: subYear(names), subs: subsIn(names) };
@@ -4227,7 +4275,10 @@ function autoCards() {
    church. Private: only people with payroll access see it. Warm personal statements for each person. engine/compensation.js */
 const CMP = BooksComp;
 const COMP = saved('compPlan', null) || copy(SAMPLE.compPlan || null);
-const canSeePay = () => isAdmin() && (!window.CLOUD || CLOUD.role === 'owner' || (CLOUD.access || []).includes('payroll'));
+const canSeePay = () => myRole() === 'payroll' || (isAdmin() && (!window.CLOUD || CLOUD.role === 'owner' || (CLOUD.access || []).includes('payroll')));
+// The pay plan: the payroll administrator proposes, an admin approves (and anything changed after that needs approving again)
+const payPlanKey = () => JSON.stringify(COMP.people.map(p => [p.name, p.grade, p.hours, p.years, p.next]));
+const payPlanState = () => !COMP.approved ? (COMP.submitted ? 'waiting' : 'draft') : COMP.approved.key === payPlanKey() ? 'approved' : 'changed';
 const cmpCents = pkg => Object.fromEntries(Object.entries(pkg || {}).map(([k, v]) => [k, cents(+v || 0)]));
 const cmpClergy = p => { if (p.clergy != null) return !!p.clergy; const s = STAFF.find(x => x.role === p.role); return !!(s && s.type === 'Clergy'); };
 const cmpGrade = p => COMP.grades.find(g => g.id === +p.grade);
@@ -4259,8 +4310,15 @@ V.staffpay = () => {
   if (!canSeePay()) return `<div class="vhead"><div><h1>Staff pay & raises</h1><p>Only people with payroll access can see pay.</p></div></div>`;
   const Y = COMP.year, rows = COMP.people.map(cmpRow), s = cmpSummary(), bud = (PLAN && PLAN.lines.find(l => /^staff/i.test(l.name) && !l.parent)) || null, cur = PROJECTS.find(p => /^staff/i.test(p.name) && !p.parent);
   const budAmt = bud ? cents(bud.amount || 0) : cur ? cents(cur.budget) : 0;
+  const ps = payPlanState(), who = id => (PEOPLE[id] || {}).name || id;
+  const stateNote = ({ draft: () => `<div class="note mb">Draft. ${isAdmin() ? 'When it looks right, approve it.' : 'When it looks right, send it to an admin to approve.'} Statements print once it's approved.</div>`,
+    waiting: () => `<div class="note gold mb">Sent for approval by ${esc(who(COMP.submitted.by))} on ${esc(COMP.submitted.on)}.${isAdmin() ? '' : ' An admin approves it.'}</div>`,
+    approved: () => `<div class="note green mb">✓ Approved by ${esc(who(COMP.approved.by))} on ${esc(COMP.approved.on)}.</div>`,
+    changed: () => `<div class="note mb" style="background:var(--red-soft);color:var(--red-ink)">Changed since ${esc(who(COMP.approved.by))} approved it on ${esc(COMP.approved.on)} — it needs approving again.</div>` })[ps]();
   return `<div class="vhead"><div><span class="eyebrow">Private · payroll access only</span><h1>Staff pay & raises</h1><p>${Y - 1} pay and what's proposed for ${Y}, against the pay grades the board sets. Type over a ${Y} amount and everything updates.</p></div>
-      <div class="acts"><button class="btn" data-open="cmpall">Raise everyone…</button><button class="btn" data-cmpprintall>🖨 All statements</button><button class="btn primary" data-cmpplan>Put in the ${Y} budget</button></div></div>
+      <div class="acts"><button class="btn" data-open="cmpall">Raise everyone…</button>${ps === 'approved' || isAdmin() ? '<button class="btn" data-cmpprintall>🖨 All statements</button>' : ''}${isAdmin() ? `<button class="btn" data-cmpplan>Put in the ${Y} budget</button>` : ''}
+        ${isAdmin() && ps !== 'approved' ? '<button class="btn primary" data-payapprove>Approve the pay plan</button>' : !isAdmin() && ['draft', 'changed'].includes(ps) ? '<button class="btn primary" data-paysubmit>Send for approval</button>' : ''}</div></div>
+    ${stateNote}
     <div class="grid g4 mb">
       <div class="card stat"><div class="k">Pay in ${Y - 1}</div><div class="v num">${fc(s.now.pay)}</div><div class="d">${rows.length} people · salary + housing</div></div>
       <div class="card stat"><div class="k">Proposed for ${Y}</div><div class="v num">${fc(s.next.pay)}</div><div class="d ${s.raise.amount >= 0 ? 'up' : 'warn'}">${s.raise.amount >= 0 ? '+' : ''}${fc(s.raise.amount)} · ${pctTxt(s.raise.pct)}</div></div>
@@ -4663,18 +4721,19 @@ P.seasonclose = name => {
 const myDeptIntro = () => `Each line of money in and out for the budgets you lead. Staff pay shows as one line, without names.`;
 V.entryhome = () => {
   const name = (PEOPLE[myPerson()] || {}).name || '';
-  const todo = [
-    [PAYOUTS.filter(p => p.status === 'New' && p.look).length, 'online giving payouts need a look', 'giving'],
-    [CASH.filter(c => c.status === 'Counted').length, 'counted offerings to take to the bank', 'giving'],
-    [REG.payouts.filter(x => x.status === 'New').length, 'event sign-up payouts to record', 'giving'],
-    [EXPENSES.filter(e => !e.receipt).length, 'charges still missing a receipt', 'expenses'],
-    [BILLS.filter(b => b.status === 'Approved').length, 'approved bills to pay', 'bills'],
-    [BANKLINES.filter(l => !l.ok).length, 'bank lines to match', 'bank'],
-    [EXPENSES.filter(e => e.status === 'Needs review').length, 'receipts waiting for a reviewer — nothing for you to do', 'expenses', true],
+  const dept = !!myScope(), todo = [
+    ...(dept ? [] : [[PAYOUTS.filter(p => p.status === 'New' && p.look).length, 'online giving payouts need a look', 'giving'],
+      [CASH.filter(c => c.status === 'Counted').length, 'counted offerings to take to the bank', 'giving'],
+      [REG.payouts.filter(x => x.status === 'New').length, 'event sign-up payouts to record', 'giving']]),
+    [vis(EXPENSES).filter(e => !e.receipt).length, 'charges still missing a receipt', 'expenses'],
+    [vis(BILLS).filter(b => b.status === 'Approved').length, 'approved bills to pay', 'bills'],
+    [vis(CHECKS).filter(c => c.status === 'Needs approval').length, 'checks waiting for approval — nothing for you to do', 'checks', true],
+    ...(dept ? [] : [[BANKLINES.filter(l => !l.ok).length, 'bank lines to match', 'bank']]),
+    [vis(EXPENSES).filter(e => e.status === 'Needs review').length, 'receipts waiting for a reviewer — nothing for you to do', 'expenses', true],
   ];
   const open = todo.filter(t => t[0] && !t[3]).length;
-  return `<div class="vhead"><div><h1>Hi${name ? ', ' + esc(name.split(' ')[0]) : ''} 👋</h1><p>${open ? `${open} thing${open === 1 ? '' : 's'} to enter or match.` : 'Everything is entered and matched.'} Reports are under Keep track.</p></div>
-      <div class="acts"><button class="btn primary" data-open="cash">Record cash &amp; checks</button><button class="btn" data-open="expense">Add an expense</button><button class="btn" data-open="check">Write a check</button><button class="btn" data-go="import">Bring in a file</button></div></div>
+  return `<div class="vhead"><div><h1>Hi${name ? ', ' + esc(name.split(' ')[0]) : ''} 👋</h1><p>${open ? `${open} thing${open === 1 ? '' : 's'} to enter or match.` : 'Everything is entered and matched.'} ${dept ? `You're set up for ${andList([...new Set(myBudgets().map(b => esc(b.name)))])}.` : myLimits().reports ? 'Reports are under Keep track.' : ''}</p></div>
+      <div class="acts">${dept ? '' : '<button class="btn primary" data-open="cash">Record cash &amp; checks</button>'}<button class="btn ${dept ? 'primary' : ''}" data-open="expense">Add an expense</button><button class="btn" data-open="check">Write a check</button>${dept ? '<button class="btn" data-open="bill">+ Add a bill</button>' : '<button class="btn" data-go="import">Bring in a file</button>'}</div></div>
     <div class="card">${todo.map(([n, label, go, info]) => `<div class="fund"><div class="nm">${n ? `<b>${n}</b> ${esc(label)}` : `<span class="muted">No ${esc(label.replace(/ — .*/, ''))}</span>`}</div>${n && !info ? `<button class="btn small primary" data-go="${go}">Go</button>` : n ? '<span class="pill gray">Waiting</span>' : '<span class="pill green">✓</span>'}</div>`).join('')}</div>`;
 };
 V.mydept = () => {
@@ -4690,17 +4749,26 @@ V.mydept = () => {
       <div class="muted small" style="margin:6px 0 10px">${Math.round(used * 100)}% of the budget used · the year is ${Math.round(YEAR_DONE * 100)}% done${keepsIncome(b) ? ' · what comes in adds to what you can spend' : ''}</div>
       ${ks.map(k => `<div class="fund" style="padding:7px 0"><div class="nm" style="font-weight:500">↳ ${esc(k.name)}<small>${fc(cents(spent(k)))} of ${fc(cents(k.budget))}${incomeOf(k) ? ` · ${fc(cents(incomeOf(k)))} came in` : ''}</small></div><button class="btn small soft" data-rpt="${esc(k.name)}">Lines</button></div>`).join('')}
       <button class="btn small primary" data-rpt="${esc(b.name)}" style="margin-top:8px">See every line</button></div>`; };
-  return `<div class="vhead"><div><h1>My department</h1><p>${esc(who)} · ${myDeptIntro()}</p></div><div class="acts"><a class="btn" href="#snap">📱 Send a receipt</a></div></div>${list.map(card).join('')}`;
+  const role = myRole(), camp = role === 'campus' && campusOf(myLimits().campus), title = camp ? camp.name : role === 'entry' ? 'My departments' : 'My department';
+  // what's waiting for this person's yes: their department's first step, or a campus admin's approval
+  const me = myPerson(), waitingOn = x => { const st = apStatus(x, x.who || x.enteredBy || x.by); return !st.done && ((st.deptNeeded && !st.deptOk && st.dept === me) || (role === 'campus' && inScope(x) && (!st.deptNeeded || st.deptOk))); };
+  const items = [...EXPENSES.map((e, i) => e.status === 'Needs review' && waitingOn(e) && { what: `Receipt · ${e.payee}`, amt: e.amt, open: `data-review="${i}"` }),
+    ...BILLS.map(b => b.status === 'To approve' && waitingOn(b) && { what: `Bill · ${(vendor(b.vendor) || {}).name || b.vendor}`, amt: b.amt, open: `data-billok="${b.id}"` }),
+    ...CHECKS.map(c => c.status === 'Needs approval' && waitingOn(c) && { what: `Check · ${c.payee}`, amt: c.amt, open: `data-ckapprove="${c.id}"` }),
+    ...REQUESTS.map(r => r.status === 'Waiting' && waitingOn(r) && { what: `Request · ${r.what}`, amt: r.amt, open: `data-req="${r.id}"` })].filter(Boolean);
+  const waitCard = ['leader', 'campus'].includes(role) ? `<div class="card mb"><h2>Waiting for you</h2><div class="sub">${role === 'leader' ? 'Spending for your department: you say yes first, then finance approves' : `Spending for ${esc(camp ? camp.name : 'your campus')}`}</div>
+    ${items.map(x => `<div class="fund"><div class="nm">${esc(x.what)}</div><div class="num">${fmt(x.amt)}</div><button class="btn small primary" ${x.open} style="margin-left:10px">Look &amp; approve</button></div>`).join('') || '<div class="muted small">Nothing waiting for you.</div>'}</div>` : '';
+  return `<div class="vhead"><div><h1>${esc(title)}</h1><p>${esc(who)} · ${myDeptIntro()}</p></div><div class="acts"><a class="btn" href="#snap">📱 Send a receipt</a></div></div>${waitCard}${list.map(card).join('')}`;
 };
 V.report = () => {
   const tops = PROJECTS.filter(p => !p.parent);
   if (!reportOf || !PROJECTS.some(p => p.name === reportOf)) reportOf = (PROJECTS.find(p => /youth/i.test(p.name) && !p.parent) || tops[0]).name;
-  if (myRole() === 'leader' && !myBudgetNames().includes(reportOf)) reportOf = (myBudgets()[0] || {}).name;   // a department head sees only their own
+  if (!seesTotals() && !myBudgetNames().includes(reportOf)) reportOf = (myBudgets()[0] || {}).name;   // department heads, campus admins and department data entry see only their own
   if (!reportOf) return V.mydept();
   const d = reportData(reportOf, reportRange), { p, r } = d, budget = cents(p.budget), isEvent = !!p.date, left = cents(leftIn(p)), used = budget ? (r.spent + d.held) / budget : 0;
   const color = fund(p.fund).color;
   return `<div class="vhead"><div><h1>${esc(p.parent ? p.parent + ' › ' : '')}${esc(p.name)}</h1><p>${isEvent ? 'Event' : 'Ministry'} report · ${esc(fund(p.fund).name)} · led by ${esc(PEOPLE[p.lead] ? PEOPLE[p.lead].name : '')}${isEvent ? ' · ' + esc(p.date) : ''}${d.names.length > 1 ? ` · includes ${andList(d.names.slice(1).map(esc))}` : ''}</p></div>
-      <div class="acts"><select class="select" id="rptPick">${myRole() === 'leader' ? myBudgetNames().map(n => `<option ${n === p.name ? 'selected' : ''}>${esc(n)}</option>`).join('') : projOptions(p.name)}</select><select class="select" id="rptRange">${Object.entries(RANGES).map(([k, l]) => `<option value="${k}" ${k === reportRange ? 'selected' : ''}>${l}</option>`).join('')}</select><button class="btn" data-rptprint>🖨 Print</button><button class="btn primary" data-rptsend ${seesTotals() ? '' : 'hidden'}>Email to ${esc(PEOPLE[p.lead] ? PEOPLE[p.lead].name.split(' ')[0] : 'the leader')}</button></div></div>
+      <div class="acts"><select class="select" id="rptPick">${!seesTotals() ? myBudgetNames().map(n => `<option ${n === p.name ? 'selected' : ''}>${esc(n)}</option>`).join('') : projOptions(p.name)}</select><select class="select" id="rptRange">${Object.entries(RANGES).map(([k, l]) => `<option value="${k}" ${k === reportRange ? 'selected' : ''}>${l}</option>`).join('')}</select><button class="btn" data-rptprint>🖨 Print</button><button class="btn primary" data-rptsend ${seesTotals() ? '' : 'hidden'}>Email to ${esc(PEOPLE[p.lead] ? PEOPLE[p.lead].name.split(' ')[0] : 'the leader')}</button></div></div>
     <div class="grid g4 mb"><div class="card stat"><div class="k">Budget ${YEAR}</div><div class="v num">${fc(budget)}</div><div class="d">${reportRange === 'ytd' ? `${Math.round(YEAR_DONE * 100)}% of the year gone` : esc(RANGES[reportRange])}</div></div>
       <div class="card stat"><div class="k">Spent</div><div class="v num">${fc(r.spent)}</div><div class="d">${d.held ? `+ ${fc(d.held)} held for approved purchases` : `${Math.round(used * 100)}% of the budget`}</div></div>
       <div class="card stat"><div class="k">Came in</div><div class="v num">${fc(r.income)}</div><div class="d">${(h => h > 0 ? `+ ${fc(h)} held until the event happens` : '')(d.names.reduce((s, n) => s + BOOKS.natural('2400', { project: n }), 0)) || r.incomeByCategory.map(x => esc(x.key)).join(', ') || 'Sign-ups, fees, gifts for it'}</div></div>
@@ -4905,8 +4973,8 @@ function closePanel() { $('#scrim').classList.remove('show'); $('#panel').classL
 function render() {
   syncFromBooks(); expireRequests(); syncFiles();
   if (window.CLOUD) Cloud.changed();
-  const k = location.hash.slice(1) || (myRole() === 'leader' ? 'mydept' : 'home');
-  let view = V[k] ? k : 'home'; if (!canOpen(view)) view = ROLE_PAGES[myRole()][0];   // a page this role doesn't get goes to their home
+  const k = location.hash.slice(1) || (rolePages() ? rolePages()[0] : 'home');
+  let view = V[k] ? k : 'home'; if (!canOpen(view)) view = rolePages()[0];   // a page this role doesn't get goes to their home
   renderSide(view);
   $('#view').innerHTML = `<div class="view">${V[view === 'home' && myRole() === 'entry' ? 'entryhome' : view]()}</div>`;
   document.querySelectorAll('#view .spl').forEach(splitRecalc);
@@ -4916,7 +4984,8 @@ $('#navBtn').onclick = e => { e.stopPropagation(); $('#newMenu').classList.remov
 $('#navScrim').onclick = () => setNav(false);
 // Mockup: see the app as each role would
 if (!window.CLOUD) { $('#viewAsWrap').innerHTML = `<select class="select" id="viewAs" title="See the app as each role would" style="max-width:230px">${VIEW_AS_CHOICES().map(([v, l]) => `<option value="${v}">Viewing as: ${esc(l)}</option>`).join('')}</select>`;
-  $('#viewAs').onchange = e => { const [role, person] = e.target.value.split('|'); VIEW_AS = role === 'owner' ? null : { role, person };
+  $('#viewAs').onchange = e => { const [role, person, lim = ''] = e.target.value.split('|'), noRep = lim === '!reports', camp = lim.startsWith('campus:') ? lim.slice(7) : null;
+    VIEW_AS = role === 'owner' ? null : { role, person, reports: !noRep, campus: camp, budgets: !noRep && !camp && lim ? lim.split('~') : [] };
     document.body.classList.toggle('readonly', role === 'viewer'); closePanel(); location.hash = ''; render(); toast(role === 'owner' ? 'Back to the admin view' : `Now seeing what ${e.target.selectedOptions[0].textContent.replace('Viewing as: ', '')} sees`); }; }
 // Bring in data: click the drop area to choose a file, or drop one on it
 document.addEventListener('click', e => { if (e.target.closest('#impDrop')) $('#impFile').click(); });
@@ -4926,7 +4995,7 @@ document.addEventListener('drop', e => { const d = e.target.closest('#impDrop');
 $('#side').addEventListener('click', e => { if (e.target.closest('a')) setNav(false); });
 
 document.addEventListener('click', e => {
-  const t = e.target.closest('[data-open],[data-go],[data-close],[data-payout],[data-expf],[data-bank],[data-fix],[data-print],[data-toast],[data-alloc],[data-review],[data-remind],[data-snapi],[data-snapshot],[data-snapsend],[data-snapback],[data-attach],[data-card],[data-budget],[data-btab],[data-reverse],[data-billok],[data-billpay],[data-billtab],[data-w9],[data-inboxbill],[data-ten99csv],[data-newvendor],[data-payback],[data-paybackall],[data-reimbsend],[data-cosign],[data-voidck],[data-printsel],[data-ppay],[data-recon],[data-reconreview],[data-reconrpt],[data-settab],[data-setfund],[data-setperson],[data-setcat],[data-setexport],[data-req],[data-asksend],[data-recrun],[data-recedit],[data-recapp],[data-recpause],[data-salary],[data-regrec],[data-plstart],[data-pladd],[data-plpropose],[data-plprint],[data-wfadd],[data-wfrm],[data-bprint],[data-bsent],[data-notifynow],[data-ntab],[data-wkpreview],[data-setnotify],[data-viewfile],[data-rmfile],[data-vfiles],[data-reconfiles],[data-entryfiles],[data-billfiles],[data-cloudexport],[data-dtab],[data-nc],[data-ncstep],[data-ncack],[data-open-ncsale],[data-stmt],[data-stmtall],[data-rental],[data-rpay],[data-ragree],[data-rdep],[data-rend],[data-rrcpt],[data-kbp],[data-kbpay],[data-kbrubric],[data-kbpause],[data-kbprint],[data-reveal],[data-pushsend],[data-totpay],[data-mksub],[data-subedit],[data-cntok],[data-assetout],[data-glexport],[data-subrpt],[data-rpt],[data-rptprint],[data-rptsend],[data-seasonclose],[data-pullnow],[data-autosign],[data-cmpedit],[data-cmpstmt],[data-cmpprint],[data-cmpprintall],[data-cmpplan],[data-impsample],[data-impgo],[data-impreset],[data-impundo],[data-kbgive],[data-kbchange],[data-pledge],[data-plupdates],[data-plprint],[data-plsend],[data-plcancel]');
+  const t = e.target.closest('[data-open],[data-go],[data-close],[data-payout],[data-expf],[data-bank],[data-fix],[data-print],[data-toast],[data-alloc],[data-review],[data-remind],[data-snapi],[data-snapshot],[data-snapsend],[data-snapback],[data-attach],[data-card],[data-budget],[data-btab],[data-reverse],[data-billok],[data-billpay],[data-billtab],[data-w9],[data-inboxbill],[data-ten99csv],[data-newvendor],[data-payback],[data-paybackall],[data-reimbsend],[data-cosign],[data-voidck],[data-printsel],[data-ppay],[data-recon],[data-reconreview],[data-reconrpt],[data-settab],[data-setfund],[data-setperson],[data-setcat],[data-setexport],[data-req],[data-asksend],[data-recrun],[data-recedit],[data-recapp],[data-recpause],[data-salary],[data-regrec],[data-plstart],[data-pladd],[data-plpropose],[data-plprint],[data-wfadd],[data-wfrm],[data-bprint],[data-bsent],[data-notifynow],[data-ntab],[data-wkpreview],[data-setnotify],[data-viewfile],[data-rmfile],[data-vfiles],[data-reconfiles],[data-entryfiles],[data-billfiles],[data-cloudexport],[data-dtab],[data-nc],[data-ncstep],[data-ncack],[data-open-ncsale],[data-stmt],[data-stmtall],[data-rental],[data-rpay],[data-ragree],[data-rdep],[data-rend],[data-rrcpt],[data-kbp],[data-kbpay],[data-kbrubric],[data-kbpause],[data-kbprint],[data-reveal],[data-pushsend],[data-totpay],[data-mksub],[data-subedit],[data-cntok],[data-assetout],[data-glexport],[data-subrpt],[data-rpt],[data-rptprint],[data-rptsend],[data-seasonclose],[data-payapprove],[data-paysubmit],[data-ckapprove],[data-pullnow],[data-autosign],[data-cmpedit],[data-cmpstmt],[data-cmpprint],[data-cmpprintall],[data-cmpplan],[data-impsample],[data-impgo],[data-impreset],[data-impundo],[data-kbgive],[data-kbchange],[data-pledge],[data-plupdates],[data-plprint],[data-plsend],[data-plcancel]');
   if (!t) { if (!e.target.closest('.newwrap, #newMenu')) $('#newMenu').classList.remove('show'); return; }
   if (t.dataset.open) openPanel(t.dataset.open, t.dataset.cardi !== undefined ? +t.dataset.cardi : undefined);
   else if (t.dataset.go) { closePanel(); location.hash = t.dataset.go; }
@@ -4993,6 +5062,11 @@ document.addEventListener('click', e => {
   else if (t.hasAttribute('data-subrpt')) sendToPrinter(subsReportHTML());
   else if (t.dataset.rpt) { reportOf = t.dataset.rpt; closePanel(); if (location.hash === '#report') render(); else location.hash = 'report'; window.scrollTo(0, 0); }
   else if (t.hasAttribute('data-rptprint')) sendToPrinter(reportHTML(reportOf, reportRange));
+  else if (t.hasAttribute('data-paysubmit')) { COMP.submitted = { by: myPerson(), on: short(new Date(TODAY + 'T12:00:00')) }; delete COMP.approved; render(); toast('Sent to an admin for approval'); }
+  else if (t.hasAttribute('data-payapprove')) { if (COMP.submitted && COMP.submitted.by === myPerson()) { toast('Someone other than the person who prepared it has to approve it'); return; }
+    const done = () => { COMP.approved = { by: myPerson(), on: short(new Date(TODAY + 'T12:00:00')), key: payPlanKey() }; delete COMP.submitted; render(); toast(`${COMP.year} pay plan approved`); };
+    if (window.CLOUD) Cloud.approvePayPlan().then(done, err => toast(err.message)); else done(); }
+  else if (t.hasAttribute('data-ckapprove')) openPanel('ckapprove', t.dataset.ckapprove);
   else if (t.hasAttribute('data-pullnow')) { const r = autoRecord(); render(); toast(`Checked ${GIV_SRC}: ${r.recorded} recorded automatically · ${r.waiting} waiting for the bank · ${r.look} need a look`); }
   else if (t.hasAttribute('data-autosign')) { const w = autoWeeks().find(x => x.week === t.dataset.autosign); AUTO.signoffs.push({ week: w.week, by: PEOPLE[SETUP.currentUser] ? PEOPLE[SETUP.currentUser].name : ME, on: short(new Date(TODAY + 'T12:00:00')), count: w.count, total: w.total }); render(); toast(`Week of ${short(new Date(w.week + 'T12:00:00'))} signed off`); }
   else if (t.hasAttribute('data-cmpedit')) openPanel('cmpedit', +t.dataset.cmpedit);
@@ -5304,6 +5378,11 @@ function postDeposit(counts, { date, slip, takenBy }) {
 // fingerprint chain is checked so an entry changed outside the app shows up on the Books page.
 function loadCloudBooks() {
   Cloud.replaying = true;
+  if (CLOUD.scoped) {   // someone limited to part of the books: just their entries, as the server handed them over (it checks everything they post)
+    try { CLOUD.entries.forEach(e => BOOKS.post({ date: e.date, memo: e.memo, source: e.source, reverses: CLOUD.entries.some(x => x.id === e.reverses) ? e.reverses : undefined, lines: e.lines, postedAt: e.postedAt }, e.postedBy));
+      if (CLOUD.state.lockedThrough) BOOKS.lock(CLOUD.state.lockedThrough, 'saved'); } finally { Cloud.replaying = false; }
+    CLOUD.chain = { ok: true, partial: true }; syncFromBooks(); BANKS.forEach(b => { if (b.bank !== null) b.bank = b.book; }); return;
+  }
   try {
     CLOUD.entries.forEach(e => { const p = BOOKS.post({ date: e.date, memo: e.memo, source: e.source, reverses: e.reverses, lines: e.lines, postedAt: e.postedAt }, e.postedBy);
       if (p.id !== e.id) throw new Error(`Saved entry ${e.id} came back as ${p.id}`); });

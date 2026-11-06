@@ -15,11 +15,14 @@ service cloud.firestore {
       // A member whose access hasn't ended (untilMs: the last moment of access, for e.g. an auditor)
       function booksMember() { return request.auth != null && exists(booksMemberDoc()) && request.time.toMillis() < get(booksMemberDoc()).data.get('untilMs', 9999999999999); }
       function booksRole() { return get(booksMemberDoc()).data.role; }
-      function booksCanRead() { return booksMember() && booksRole() in ['owner', 'admin', 'bookkeeper', 'reviewer', 'viewer', 'entry']; }
-      function booksCanWork() { return booksMember() && booksRole() in ['owner', 'admin', 'bookkeeper', 'reviewer', 'entry']; }   // entry = data entry: records, never approves
+      // Someone limited to certain departments (data entry for Youth, say) never reads the whole ledger: the server hands
+      // them their own part (booksScopedBooks). Campus admins and payroll administrators work the same way.
+      function booksScoped() { return get(booksMemberDoc()).data.get('budgets', []).size() > 0; }
+      function booksCanRead() { return booksMember() && booksRole() in ['owner', 'admin', 'bookkeeper', 'reviewer', 'viewer', 'entry'] && !booksScoped(); }
+      function booksCanWork() { return booksMember() && booksRole() in ['owner', 'admin', 'bookkeeper', 'reviewer', 'entry'] && !booksScoped(); }   // entry = data entry: records, never approves
       function booksSenderStatus(s) { return s in ['Needs receipt', 'Needs review']; }
       // Private information: the owner, and people the owner has given that kind of access to
-      function booksPrivate(kind) { return booksMember() && (booksRole() == 'owner' || kind in get(booksMemberDoc()).data.get('access', [])); }
+      function booksPrivate(kind) { return booksMember() && (booksRole() == 'owner' || kind in get(booksMemberDoc()).data.get('access', []) || (kind == 'payroll' && booksRole() == 'payroll')); }
 
       allow read: if booksMember();
       allow write: if false;
@@ -40,10 +43,13 @@ service cloud.firestore {
       // Who gave what, salaries, medical and benevolence: kept apart, each readable only by those given it
       match /private/{kind} {
         allow read: if kind in ['donors', 'payroll', 'medical', 'benevolence'] && booksPrivate(kind);
-        allow write: if kind in ['donors', 'payroll', 'medical', 'benevolence'] && booksPrivate(kind) && (booksCanWork() || booksRole() == 'owner')
+        allow write: if kind in ['donors', 'payroll', 'medical', 'benevolence'] && booksPrivate(kind) && (booksCanWork() || booksRole() == 'owner' || (kind == 'payroll' && booksRole() == 'payroll'))
           && request.resource.data.keys().hasOnly(['json', 'updatedAt', 'updatedBy'])
           && request.resource.data.json is string && request.resource.data.json.size() < 900000;
       }
+
+      // Approved pay plans: written only by the server when an admin approves; read by admins and payroll
+      match /payPlans/{year}   { allow read: if booksMember() && (booksRole() in ['owner', 'admin', 'payroll'] || booksPrivate('payroll')); allow write: if false; }
 
       // Everyday work (bills, vendors, checks, reconciliations, file list…): one document per kind,
       // saved by the people who do the work. Viewers (board, auditor) can only read.

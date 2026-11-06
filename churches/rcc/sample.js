@@ -39,6 +39,8 @@
   { date: 'Oct 11', days: 7,  payee: 'Amazon',             amt: 57.98,   who: 'dana',   proj: 'Everyday ministry',  acct: 'Office supplies',       paid: 'Church Visa ••1104',     receipt: false, status: 'Needs receipt' },
   { date: 'Oct 10', days: 8,  payee: 'Wegmans',            amt: 142.60,  who: 'kelly',  proj: 'Fall Festival',      acct: 'Hospitality',           paid: 'Reimbursement',          receipt: true,  status: 'Needs review' },
   { date: 'Oct 6',  days: 12, payee: 'Michaels', amt: 38.47, who: 'kelly', proj: 'Fall Festival', acct: 'Event supplies', paid: 'Reimbursement', receipt: true, status: 'Done', reimb: 'To pay' },
+  { date: 'Oct 14', days: 4, payee: 'Costco', amt: 186.40, who: 'jordan', proj: 'Oxford campus', acct: 'Hospitality', paid: 'Reimbursement', receipt: true, status: 'Needs review', reimb: 'To pay' },
+  { date: 'Oct 11', days: 7, payee: 'Oriental Trading', amt: 94.15, who: 'kelly', proj: 'Oxford kids & youth', acct: 'Ministry supplies', paid: 'Reimbursement', receipt: true, status: 'Needs review', reimb: 'To pay' },
   { date: 'Oct 15', days: 3, payee: 'Panera Bread', amt: 86.20, who: 'kelly', proj: 'MomCo', acct: 'Hospitality', paid: 'Reimbursement', receipt: true, status: 'Done', reimb: 'To pay' },
   { date: 'Oct 9',  days: 9,  payee: 'Target', amt: 52.18, who: 'sam', proj: 'Youth Ministry', acct: 'Ministry supplies', paid: 'Reimbursement', receipt: true, status: 'Done', reimb: 'To pay' },
   { date: 'Jul 30', days: 80, payee: 'Office Depot', amt: 64.20, who: 'marcus', proj: 'Everyday ministry', acct: 'Office supplies', paid: 'Reimbursement', receipt: true, status: 'Needs review' },

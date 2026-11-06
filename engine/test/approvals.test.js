@@ -33,3 +33,25 @@ test('approval settings are checked when the church is set up', () => {
   const p = A.validate({ approvers: ['nick'], approvalTiers: [{ upTo: 1000, approvals: 1 }, { upTo: 500, approvals: 3 }] }, { nick: {} }).join('\n');
   assert.match(p, /amounts have to go up/); assert.match(p, /cover everything above/); assert.match(p, /needs 3 approvals, but only 1 person/);
 });
+
+test('department heads approve their department first, then finance', () => {
+  const A = require('../approvals.js');
+  const pol = { approvers: ['nick', 'pat', 'sam'], approvalTiers: [{ upTo: 500, approvals: 1 }, { upTo: null, approvals: 2 }] };
+  const plan = A.planFor(pol, { amount: 300, dept: 'sam' });
+  assert.strictEqual(plan.dept, 'sam');
+  // finance alone isn't enough while the department step is open
+  let s = A.status(pol, plan, [{ by: 'nick' }], { submitter: 'kelly' });
+  assert.deepStrictEqual([s.done, s.deptOk, s.have], [false, false, 1]);
+  s = A.status(pol, plan, [{ by: 'sam', kind: 'dept' }, { by: 'nick' }], { submitter: 'kelly' });
+  assert.deepStrictEqual([s.done, s.deptOk], [true, true]);
+  // the department head's yes isn't a finance approval too
+  s = A.status(pol, plan, [{ by: 'sam', kind: 'dept' }, { by: 'sam' }], { submitter: 'kelly' });
+  assert.deepStrictEqual([s.done, s.have, s.canStill.includes('sam')], [false, 0, false]);
+  // someone else can't sign for the department
+  assert.ok(A.status(pol, plan, [{ by: 'pat', kind: 'dept' }, { by: 'nick' }], { submitter: 'kelly' }).problems.includes('not_dept_head'));
+  // the department head spent it: no department step, finance still approves
+  s = A.status(pol, plan, [{ by: 'nick' }], { submitter: 'sam' });
+  assert.deepStrictEqual([s.done, s.deptNeeded], [true, false]);
+  // a church can turn the step off
+  assert.strictEqual(A.planFor({ ...pol, deptApproval: false }, { amount: 300, dept: 'sam' }).dept, null);
+});

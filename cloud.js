@@ -88,7 +88,9 @@
     if (me.untilMs && Date.now() > me.untilMs) throw new Error(`Your access ended on ${new Date(me.untilMs).toLocaleDateString()}.`);
     if (me.role === 'leader') { leaderScreen(); return false; }
     if (me.role === 'counter') { counterScreen(); return false; }
-    if (!['owner', 'admin', 'bookkeeper', 'reviewer', 'viewer', 'entry'].includes(me.role)) throw new Error('Your role only sends receipts. The receipt page for phones is coming soon.');
+    if (!['owner', 'admin', 'bookkeeper', 'reviewer', 'viewer', 'entry', 'campus', 'payroll'].includes(me.role)) throw new Error('Your role only sends receipts. The receipt page for phones is coming soon.');
+    // Limited to part of the books (department data entry, campus admin, payroll administrator): the server hands over that part
+    if (me.role === 'campus' || me.role === 'payroll' || (me.role === 'entry' && (me.budgets || []).length)) return loadScoped(org);
     const [setupSnap, stateSnap, entriesSnap, wsSnap, expSnap] = await Promise.all([org.collection('settings').doc('setup').get(), org.collection('ledger').doc('state').get(),
       org.collection('entries').orderBy('seq').get(), org.collection('workspace').get(), org.collection('expenses').get()]);
     if (!setupSnap.exists) throw new Error('This church has no setup yet.');
@@ -114,6 +116,22 @@
     document.getElementById('cloudGate').remove();
     return true;
   }
+  async function loadScoped(org) {
+    const r = await call('booksScopedBooks', {}), setup = r.setup;
+    if (!me.personId || !(setup.people || {})[me.personId]) throw new Error(`Your sign-in isn't linked to anyone in ${setup.shortName}'s people list yet. Ask the admin to fix your invite.`);
+    const ws = { ...(r.workspace || {}) };
+    if (canPrivate('payroll')) { try { const d = await org.collection('private').doc('payroll').get(); if (d.exists) { rawPriv.payroll = d.data().json; const v = JSON.parse(rawPriv.payroll); ws.staff = v.staff || []; ws.compPlan = v.compPlan || null; } } catch (e) { /* not allowed */ } }
+    const expenses = []; (await org.collection('expenses').where('senderUid', '==', me.uid).get()).forEach(d => { const x = JSON.parse(d.data().json); rawExp[x.id] = d.data().json; expenses.push(x); });
+    const t = new Date(), next15 = new Date(t.getFullYear(), t.getMonth() + (t.getDate() > 15 ? 1 : 0), 15), yest = new Date(t.getTime() - 86400000);
+    window.CHURCH_SETUP = { ...strip(setup), currentUser: me.personId };
+    window.CHURCH_SAMPLE = { payouts: [], cash: [], subscriptions: [], inbox: [], bankLines: [], staff: [], checks: [], vendors: [], bills: [], schedules: [], requests: [], nonCash: [], donors: [], pledges: [], pledgeCampaigns: [], rentals: [], partners: [], pushes: [], assets: [],
+      registrations: { events: [], payouts: [], refunds: [] }, commitments: {}, statementThrough: shortOf(yest),
+      payrollSchedule: { frequency: 'Monthly', next: shortOf(next15), approveBy: shortOf(new Date(next15.getTime() - 2 * 86400000)) }, ...ws, expenses, today: localToday() };
+    window.CLOUD = { orgId, role: me.role, uid: me.uid, access: me.access || [], untilMs: me.untilMs || null, alerts: [], entries: r.entries, state: r.state, app: null,
+      scoped: true, budgets: me.budgets || [], campus: me.campus || null, reports: me.reports !== false };
+    document.getElementById('cloudGate').remove();
+    return true;
+  }
   // A church with nothing in it yet: the owner brings in an export, or starts fresh.
   function emptyBooks(setup) {
     return new Promise(resolve => {
@@ -135,7 +153,7 @@
     });
   }
   Cloud.importBooks = data => call('booksImport', { data });
-  const canPrivate = kind => me && (me.role === 'owner' || (me.access || []).includes(kind));
+  const canPrivate = kind => me && (me.role === 'owner' || (me.access || []).includes(kind) || (kind === 'payroll' && me.role === 'payroll'));
   Cloud.canPrivate = canPrivate;
   // Books administrators only: start a church from an "Export everything" file (its setup, and its books if it has any).
   function startChurch(user) {
@@ -193,10 +211,18 @@
     if (s === lastSetup) return;
     await call('booksUpdateSetup', { setup: JSON.parse(s), what: hooks.lastChange() }); lastSetup = s;
   }
+  function savePayrollOnly() {
+    const wsAll = hooks.workspace(), j = JSON.stringify({ staff: wsAll.staff || [], compPlan: wsAll.compPlan || null });
+    if (j === rawPriv.payroll || (rawPriv.payroll == null && !(wsAll.staff || []).length && !wsAll.compPlan)) return;
+    fs.doc(`orgs/${orgId}/private/payroll`).set({ json: j, updatedAt: new Date().toISOString(), updatedBy: me.name || me.email }).then(() => { rawPriv.payroll = j; }, e => fail(e, 'pay plan'));
+  }
+  Cloud.approvePayPlan = () => call('booksApprovePayPlan', {});
   // Called after every render: saves whatever changed, a moment later.
   Cloud.changed = () => { clearTimeout(timer); timer = setTimeout(save, 700); };
   function save() {
-    if (!hooks || !WORKERS.includes(me.role)) return;
+    if (!hooks) return;
+    if (CLOUD.scoped) { if (me.role === 'payroll') savePayrollOnly(); return; }   // a partial copy must never overwrite the church's records
+    if (!WORKERS.includes(me.role)) return;
     if (JSON.stringify(strip(hooks.setup())) !== lastSetup) chain = track(chain.then(flushSetup), 'settings');
     const org = fs.doc(`orgs/${orgId}`), by = me.name || me.email, at = new Date().toISOString(), jobs = [];
     const wsAll = hooks.workspace();

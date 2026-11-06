@@ -43,10 +43,16 @@ test('check numbers come from the server, once each', async () => {
   assert.strictEqual(numbers.length, 2); assert.strictEqual(numbers[1], numbers[0] + 1);
   const ck = no => R.bankPayment({ date: '2026-10-12', memo: `Check #${no}`, source: { type: 'check', id: String(no) }, amount: 150000, expense: '5000', fund: 'general', bank: '1000', party: 'Roofer' });
   assert.strictEqual(await code(c['rev@r.org'].call('booksPostEntry', { orgId: org, draft: ck(99999) })), 'failed-precondition');   // never issued
-  assert.strictEqual(await code(c['rev@r.org'].call('booksPostEntry', { orgId: org, draft: ck(numbers[0]) })), 'ok');
-  assert.strictEqual(await code(c['rev@r.org'].call('booksPostEntry', { orgId: org, draft: ck(numbers[0]) })), 'already-exists');
+  // a check written by hand is approved like spending: $1,500 needs two approvers who didn't write it
+  assert.strictEqual(await code(c['rev@r.org'].call('booksPostEntry', { orgId: org, draft: ck(numbers[0]) })), 'failed-precondition');
+  const apCk = who => c[who].call('booksApprove', { orgId: org, kind: 'check', id: 'ck1', amount: 1500, submitter: 'office' });
+  assert.strictEqual(await code(apCk('rev@r.org')), 'permission-denied');                  // office wrote it
+  await apCk('own@r.org'); const two = await apCk('rev2@r.org'); assert.strictEqual(two.done, true);
+  const withAp = { orgId: org, draft: ck(numbers[0]), approval: { kind: 'check', id: 'ck1' } };
+  assert.strictEqual(await code(c['rev@r.org'].call('booksPostEntry', withAp)), 'ok');
+  assert.strictEqual(await code(c['rev@r.org'].call('booksPostEntry', withAp)), 'already-exists');
   await c['rev@r.org'].call('booksVoidCheck', { orgId: org, no: numbers[1], reason: 'Printed crooked' });
-  assert.strictEqual(await code(c['rev@r.org'].call('booksPostEntry', { orgId: org, draft: ck(numbers[1]) })), 'failed-precondition');
+  assert.strictEqual(await code(c['rev@r.org'].call('booksPostEntry', { orgId: org, draft: ck(numbers[1]), approval: { kind: 'check', id: 'ck1' } })), 'failed-precondition');
   const next = await c['rev@r.org'].call('booksReserveChecks', { orgId: org, count: 1 });
   assert.strictEqual(next.numbers[0], numbers[1] + 1);   // a voided number is never handed out again
   const alerts = (await db.collection(`orgs/${org}/alerts`).get()).docs.map(d => d.data());
@@ -99,4 +105,44 @@ test('data entry records money but never approves, reverses, locks or sees priva
   assert.strictEqual(await code(e['entry-e@r.org'].call('booksLockMonth', { orgId: o, through: '2026-09-30' })), 'permission-denied');
   assert.strictEqual(await code(e['entry-e@r.org'].call('booksUpdateSetup', { orgId: o, setup: {} })), 'permission-denied');
   assert.deepStrictEqual((await e['entry-e@r.org'].call('booksReserveChecks', { orgId: o, count: 1 })).numbers.length, 1);                           // writes checks
+});
+
+test('the department head says yes first, then finance; department heads approve nothing else', async () => {
+  // Grace's Youth budget is led by "youth" (here a department head); office spent it
+  const d = reimb('dx1', 30000);
+  const ap = (who, extra = {}) => c[who].call('booksApprove', { orgId: org, kind: 'expense', id: 'dx1', amount: 300, submitter: 'office', budget: 'Youth', ...extra });
+  const fin = await ap('own@r.org'); assert.deepStrictEqual([fin.done, fin.deptOk], [false, false]);   // finance alone isn't enough
+  assert.strictEqual(await code(c['rev@r.org'].call('booksPostEntry', { orgId: org, draft: d, approval: { kind: 'expense', id: 'dx1' } })), 'failed-precondition');
+  const dept = await ap('lead@r.org'); assert.deepStrictEqual([dept.done, dept.deptOk], [true, true]);
+  assert.strictEqual(await code(c['rev@r.org'].call('booksPostEntry', { orgId: org, draft: d, approval: { kind: 'expense', id: 'dx1' } })), 'ok');
+  // a department head can't approve another department's spending, or act as finance
+  assert.strictEqual(await code(c['lead@r.org'].call('booksApprove', { orgId: org, kind: 'expense', id: 'dx2', amount: 50, submitter: 'office', budget: 'Ministry operations' })), 'permission-denied');
+});
+
+test('data entry for certain departments, a campus admin and a payroll administrator stay inside their limits', async () => {
+  const o = org + 's', d = await makeOrg(o, { 'own-s@r.org': ['owner', 'lee'], 'adm-s@r.org': ['admin', 'office'], 'yth-s@r.org': ['entry', 'youth'], 'cmp-s@r.org': ['campus', 'youth'], 'pay-s@r.org': ['payroll', 'office'] });
+  await db.doc(`orgs/${o}/members/${d['yth-s@r.org'].uid}`).set({ budgets: ['Youth'] }, { merge: true });
+  await db.doc(`orgs/${o}/members/${d['cmp-s@r.org'].uid}`).set({ campus: 'east' }, { merge: true });
+  await db.doc(`orgs/${o}/settings/setup`).set({ campuses: [{ id: 'east', name: 'East campus', budgets: ['Building repairs'], admin: 'youth' }] }, { merge: true });
+  const spend = (id, budget, amt = 4000) => ({ date: '2026-10-05', memo: `Supplies ${id}`, source: { type: 'test_spend', id }, lines: [{ account: '5100', fund: 'general', debit: amt, project: budget }, { account: '1000', fund: 'general', credit: amt }] });
+  // department data entry: inside their departments (projects inside them too), never outside
+  assert.strictEqual(await code(d['yth-s@r.org'].call('booksPostEntry', { orgId: o, draft: spend('a', 'Summer camp') })), 'ok');
+  assert.strictEqual(await code(d['yth-s@r.org'].call('booksPostEntry', { orgId: o, draft: spend('b', 'Ministry operations') })), 'permission-denied');
+  await d['own-s@r.org'].call('booksPostEntry', { orgId: o, draft: spend('c', 'Ministry operations', 9900) });
+  const mine = await d['yth-s@r.org'].call('booksScopedBooks', { orgId: o });
+  assert.deepStrictEqual(mine.entries.map(e => e.memo), ['Supplies a']);   // the rest of the books never leave the server
+  // a campus admin approves their campus's spending (as a finance approval), and nobody else's
+  const ap = (who, id, budget) => d[who].call('booksApprove', { orgId: o, kind: 'expense', id, amount: 40, submitter: 'office', budget });
+  assert.strictEqual((await ap('cmp-s@r.org', 'e1', 'Building repairs')).have, 1);
+  assert.strictEqual(await code(ap('cmp-s@r.org', 'e2', 'Ministry operations')), 'permission-denied');
+  // the payroll administrator records payroll only, and can't approve their own pay plan
+  const payDraft = { date: '2026-10-15', memo: 'Payroll Oct 15', source: { type: 'payroll', id: '2026-10-15' }, lines: [{ account: '5000', fund: 'general', debit: 300000, project: 'Staff' }, { account: '1000', fund: 'general', credit: 300000 }] };
+  assert.strictEqual(await code(d['pay-s@r.org'].call('booksPostEntry', { orgId: o, draft: spend('d', 'Staff') })), 'permission-denied');
+  assert.strictEqual(await code(d['pay-s@r.org'].call('booksPostEntry', { orgId: o, draft: payDraft })), 'ok');
+  assert.deepStrictEqual((await d['pay-s@r.org'].call('booksScopedBooks', { orgId: o })).entries.map(e => e.memo), ['Payroll Oct 15']);
+  await db.doc(`orgs/${o}/private/payroll`).set({ json: JSON.stringify({ staff: [], compPlan: { year: 2027, people: [], submitted: { by: 'office', on: 'Nov 6' } } }) });
+  assert.strictEqual(await code(d['pay-s@r.org'].call('booksApprovePayPlan', { orgId: o })), 'permission-denied');   // not an admin
+  assert.strictEqual(await code(d['adm-s@r.org'].call('booksApprovePayPlan', { orgId: o })), 'permission-denied');   // office prepared it
+  assert.strictEqual((await d['own-s@r.org'].call('booksApprovePayPlan', { orgId: o })).year, 2027);
+  assert.ok((await db.doc(`orgs/${o}/payPlans/2027`).get()).exists);
 });
